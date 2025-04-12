@@ -22,14 +22,12 @@ export default function LoginForm() {
         email,
         password,
       });
-      console.log(2, data, error);
 
       if (error) {
         throw error;
       }
 
       if (data.user) {
-        console.log(3, data.user);
         router.push("/admin");
       }
     } catch (err: any) {

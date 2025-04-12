@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase/config";
 
-export default function AuthGuard({ children }: { children: React.ReactNode }) {
+function AuthGuardContent({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
@@ -27,7 +27,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
         if (!session && !isSharedProposal) {
           // Se não estiver autenticado e não for uma proposta compartilhada, redireciona
-          console.log(1, session, isSharedProposal);
           if (pathname !== "/admin/login") {
             router.push("/admin/login");
           }
@@ -36,7 +35,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         }
 
         if (session && pathname == "/admin/login") {
-          console.log(10, session);
           setIsAuthenticated(true);
           router.push("/admin");
         }
@@ -99,4 +97,18 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   // Se estiver autenticado, renderiza o conteúdo
   return <>{children}</>;
+}
+
+export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center admin-section">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      }
+    >
+      <AuthGuardContent>{children}</AuthGuardContent>
+    </Suspense>
+  );
 }

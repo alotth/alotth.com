@@ -11,7 +11,7 @@ export default function MarkdownRenderer({
   theme,
 }: MarkdownRendererProps) {
   const { styles } = theme;
-  console.log(1, theme);
+
   return (
     <div className={styles.container}>
       <ReactMarkdown
