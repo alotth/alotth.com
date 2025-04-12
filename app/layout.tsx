@@ -5,8 +5,8 @@ import { Inter } from "next/font/google";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Alotth.com - Sistema de Propostas",
-  description: "Sistema de gerenciamento de propostas em markdown",
+  title: "Alotth.com",
+  description: "",
 };
 
 export default function RootLayout({

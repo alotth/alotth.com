@@ -1,4 +1,4 @@
-# Alotth.com - Sistema de Propostas
+# Alotth.com
 
 ## Arquitetura
 
