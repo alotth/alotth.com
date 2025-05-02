@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/config";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { M_PLUS_1 } from "next/font/google";
 
 export default function LoginForm() {
@@ -11,6 +11,7 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const supabase = createClientComponentClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +30,7 @@ export default function LoginForm() {
 
       if (data.user) {
         router.push("/admin");
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || "Erro ao fazer login");

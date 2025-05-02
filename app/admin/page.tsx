@@ -7,7 +7,7 @@ export default function AdminDashboard() {
         <h1 className="text-3xl font-bold">Dashboard Administrativo</h1>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="flex flex-col gap-6">
         <div className="p-6 bg-white rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Propostas</h2>
           <p className="text-gray-600 mb-4">
@@ -22,7 +22,22 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
-      </div>
+
+        <div className="p-6 bg-white rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">Mindmap</h2>
+          <p className="text-gray-600 mb-4">
+            Mindmap para organizar suas ideias
+          </p>
+          <div className="flex items-center space-x-4">
+            <Link
+              href="/admin/mindmap"
+              className="text-primary hover:underline"
+            >
+              Gerenciar Mindmap →
+            </Link>
+          </div>
+        </div>
+      </div>  
     </div>
   );
 }
