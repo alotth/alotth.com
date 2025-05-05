@@ -3,6 +3,7 @@ import { Handle, Position, NodeProps } from "reactflow";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
+import { getNodeProjects } from "@/lib/mindmap";
 
 interface MindmapNodeData {
   content: string;
@@ -13,15 +14,14 @@ interface MindmapNodeData {
     fontSize?: number;
   };
   onChange?: (newText: string) => void;
-  referencedProjectId?: string;
-  referencedProjectName?: string;
 }
 
-export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeData>) => {
+export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapNodeData>) => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.content);
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowExpand, setShouldShowExpand] = useState(false);
+  const [projects, setProjects] = useState<{ project_id: string; project_title: string }[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -32,6 +32,19 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
       setShouldShowExpand(contentHeight > containerHeight);
     }
   }, [text, isExpanded]);
+
+  useEffect(() => {
+    async function loadProjects() {
+      try {
+        const nodeProjects = await getNodeProjects(id);
+        setProjects(nodeProjects);
+      } catch (err) {
+        console.error("Failed to load node projects:", err);
+      }
+    }
+
+    loadProjects();
+  }, [id]);
 
   // Keep textarea focused when styles change
   useEffect(() => {
@@ -48,6 +61,7 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
     setIsEditing(false);
     if (data.onChange) {
       data.onChange(text);
+      console.log("text", text);
     }
   };
 
@@ -169,19 +183,20 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
           )}
         </div>
       )}
-      {data.referencedProjectId && (
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          <Link
-            href={`/admin/mindmap/${data.referencedProjectId}`}
-            className="px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
-          >
-            Open Project
-          </Link>
-          {data.referencedProjectName && (
-            <span className="text-gray-500 truncate max-w-[100px]">
-              {data.referencedProjectName}
-            </span>
-          )}
+      {projects.length > 1 && (
+        <div className="mt-2 text-xs text-gray-500">
+          <div>Shared in {projects.length} project{projects.length > 1 ? 's' : ''}:</div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {projects.map(project => (
+              <Link
+                key={project.project_id}
+                href={`/admin/mindmap/${project.project_id}`}
+                className="px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
+              >
+                {project.project_title}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
       <Handle

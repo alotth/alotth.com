@@ -4,6 +4,7 @@ import {
   MindmapNode,
   MindmapEdge,
   MindmapData,
+  MindmapNodeProjectWithNode,
 } from "@/types/mindmap";
 import { Node, Edge } from "reactflow";
 
@@ -36,8 +37,6 @@ export async function getMindmapProject(id: string, cacheBust?: string): Promise
     throw new Error("Not authenticated");
   }
 
-  console.log('Fetching mindmap project:', id, 'with cache bust:', cacheBust);
-
   try {
     // Get project
     const { data: project, error: projectError } = await supabase
@@ -46,40 +45,41 @@ export async function getMindmapProject(id: string, cacheBust?: string): Promise
       .eq("id", id)
       .single();
 
-    if (projectError) {
-      console.error('Error fetching project:', projectError);
-      throw projectError;
-    }
+    if (projectError) throw projectError;
 
-    // Get nodes with cache busting
-    const { data: nodes, error: nodesError } = await supabase
-      .from("mindmap_nodes")
-      .select()
-      .eq("project_id", id)
-      .order('created_at', { ascending: true });
+    // Get nodes for this project with their positions and styles
+    const { data: nodeProjects, error: nodeProjectsError } = await supabase
+      .from("mindmap_node_projects")
+      .select(`
+        node_id,
+        position_x,
+        position_y,
+        style,
+        mindmap_nodes:node_id (
+          id,
+          content
+        )
+      `)
+      .eq("project_id", id) as { data: MindmapNodeProjectWithNode[] | null, error: any };
 
-    if (nodesError) {
-      console.error('Error fetching nodes:', nodesError);
-      throw nodesError;
-    }
+    if (nodeProjectsError) throw nodeProjectsError;
 
-    // Get edges with cache busting
+    // Get edges
     const { data: edges, error: edgesError } = await supabase
       .from("mindmap_edges")
       .select()
-      .eq("project_id", id)
-      .order('created_at', { ascending: true });
+      .eq("project_id", id);
 
-    if (edgesError) {
-      console.error('Error fetching edges:', edgesError);
-      throw edgesError;
-    }
-
-    console.log('Fetched mindmap data:', {
-      project,
-      nodesCount: nodes?.length,
-      edgesCount: edges?.length
-    });
+    if (edgesError) throw edgesError;
+    console.log(nodeProjects);
+    // Transform nodeProjects into nodes
+    const nodes = nodeProjects?.map(np => ({
+      id: np.node_id,
+      content: np.mindmap_nodes.content,
+      position: { x: np.position_x, y: np.position_y },
+      style: np.style || {},
+      project_id: id,
+    })) || [];
 
     return {
       project,
@@ -92,10 +92,15 @@ export async function getMindmapProject(id: string, cacheBust?: string): Promise
   }
 }
 
-export async function updateMindmapNodes(
+export async function updateMindmapNodes({
+  projectId,
+  nodes,
+  linkedProjectId,
+}: {
   projectId: string,
-  nodes: Node[]
-): Promise<void> {
+  nodes: Node[],
+  linkedProjectId?: string
+}): Promise<void> {
   const supabase = createClientComponentClient();
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -103,20 +108,64 @@ export async function updateMindmapNodes(
     throw new Error("Not authenticated");
   }
 
-  console.log('Updating mindmap nodes:', nodes);
-  const { error } = await supabase.from("mindmap_nodes").upsert(
-    nodes.map((node) => ({
-      id: node.id,
-      content: node.data.content || '',
-      position: node.position,
-      style: node.data.style || {},
-      project_id: projectId,
-      referenced_project_id: node.data.referencedProjectId,
-      referenced_project_name: node.data.referencedProjectName,
-    }))
-  );
+  // First, check if the project exists and belongs to the user
+  const { data: project, error: projectError } = await supabase
+    .from("mindmap_projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", session.user.id)
+    .single();
 
-  if (error) throw error;
+  if (projectError || !project) {
+    throw new Error("Project not found or access denied");
+  }
+
+  // For each node, first create the node
+  for (const node of nodes) {
+    // First, try to insert the node
+    const { error: nodeError } = await supabase
+      .from("mindmap_nodes")
+      .upsert({
+        id: node.id,
+        content: node.data.content || '',
+      }, {
+        onConflict: 'id'
+      });
+
+    if (nodeError) throw nodeError;
+
+    // Then, create or update the node-project relationship for the current project
+    const { error: nodeProjectError } = await supabase
+      .from("mindmap_node_projects")
+      .upsert({
+        node_id: node.id,
+        project_id: projectId,
+        position_x: node.position.x,
+        position_y: node.position.y,
+        style: node.data.style || {},
+      }, {
+        onConflict: 'node_id,project_id'
+      });
+
+    if (nodeProjectError) throw nodeProjectError;
+
+    // If this is a shared node with another project, create the relationship there too
+    if (linkedProjectId) {
+      const { error: linkedProjectError } = await supabase
+        .from("mindmap_node_projects")
+        .upsert({
+          node_id: node.id,
+          project_id: linkedProjectId,
+          position_x: node.position.x,
+          position_y: node.position.y,
+          style: node.data.style || {},
+        }, {
+          onConflict: 'node_id,project_id'
+        });
+
+      if (linkedProjectError) throw linkedProjectError;
+    }
+  }
 }
 
 export async function updateMindmapEdges(
@@ -142,13 +191,10 @@ export async function updateMindmapEdges(
     }))
   );
 
-  if (error) {
-    console.error('Edge creation error:', error);
-    throw error;
-  }
+  if (error) throw error;
 }
 
-export async function deleteMindmapNode(nodeId: string): Promise<void> {
+export async function deleteMindmapNode(nodeId: string, projectId: string): Promise<void> {
   const supabase = createClientComponentClient();
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -156,47 +202,42 @@ export async function deleteMindmapNode(nodeId: string): Promise<void> {
     throw new Error("Not authenticated");
   }
 
-  console.log('Deleting node:', nodeId);
-
   try {
     // First delete all edges connected to this node
-    const { error: edgesError, data: deletedEdges } = await supabase
+    const { error: edgesError } = await supabase
       .from("mindmap_edges")
       .delete()
-      .or(`source_id.eq.${nodeId},target_id.eq.${nodeId}`)
-      .select();
+      .eq("project_id", projectId)
+      .or(`source_id.eq.${nodeId},target_id.eq.${nodeId}`);
 
-    console.log('Deleted edges:', deletedEdges);
-    if (edgesError) {
-      console.error('Error deleting edges:', edgesError);
-      throw edgesError;
-    }
+    if (edgesError) throw edgesError;
 
-    // Then delete the node
-    const { error, data: deletedNode } = await supabase
-      .from("mindmap_nodes")
+    // Then delete the node-project relationships
+    const { error: nodeProjectsError } = await supabase
+      .from("mindmap_node_projects")
       .delete()
-      .eq("id", nodeId)
-      .select();
+      .eq("node_id", nodeId)
+      .eq("project_id", projectId);
 
-    console.log('Deleted node:', deletedNode);
-    if (error) {
-      console.error('Error deleting node:', error);
-      throw error;
+    if (nodeProjectsError) throw nodeProjectsError;
+
+    // Get the node projects
+    const { data: nodeProjects, error: nodeProjectsError2 } = await supabase
+      .from("mindmap_node_projects")
+      .select("*")
+      .eq("node_id", nodeId);
+
+    if (nodeProjectsError2) throw nodeProjectsError2;
+
+    if (nodeProjects?.length === 0) {
+      // Finally delete the node itself
+      const { error: nodeError } = await supabase
+        .from("mindmap_nodes")
+        .delete()
+        .eq("id", nodeId);
+
+      if (nodeError) throw nodeError;
     }
-
-    // Verify deletion by checking if the node exists in the current project
-    const { data: projectNodes } = await supabase
-      .from("mindmap_nodes")
-      .select("id")
-      .eq("id", nodeId);
-
-    if (projectNodes && projectNodes.length > 0) {
-      console.error('Node still exists after deletion:', projectNodes);
-      throw new Error('Failed to delete node');
-    }
-
-    console.log('Node deletion verified successfully');
   } catch (error) {
     console.error('Error in deleteMindmapNode:', error);
     throw error;
@@ -235,4 +276,190 @@ export async function getAvailableProjects(currentProjectId: string): Promise<Mi
 
   if (error) throw error;
   return data;
+}
+
+export async function createNodeReference(
+  sourceNodeId: string,
+  targetNodeId: string,
+  sourceProjectId: string,
+  targetProjectId: string
+): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // Check for circular references
+  const { data: existingRefs } = await supabase
+    .from("mindmap_node_references")
+    .select("source_node_id, target_node_id")
+    .eq("source_node_id", targetNodeId)
+    .eq("target_node_id", sourceNodeId);
+
+  if (existingRefs && existingRefs.length > 0) {
+    throw new Error("Circular references are not allowed");
+  }
+
+  // Check reference depth
+  const { data: targetRefs } = await supabase
+    .from("mindmap_node_references")
+    .select("source_node_id")
+    .eq("target_node_id", targetNodeId);
+
+  if (targetRefs && targetRefs.length >= 5) {
+    throw new Error("Maximum reference depth reached (5 levels)");
+  }
+
+  const { error } = await supabase
+    .from("mindmap_node_references")
+    .insert({
+      source_node_id: sourceNodeId,
+      target_node_id: targetNodeId,
+      source_project_id: sourceProjectId,
+      target_project_id: targetProjectId,
+    });
+
+  if (error) throw error;
+}
+
+export async function getNodeReferences(nodeId: string): Promise<{
+  sourceReferences: { node_id: string; project_id: string }[];
+  targetReferences: { node_id: string; project_id: string }[];
+}> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { data: sourceRefs, error: sourceError } = await supabase
+    .from("mindmap_node_references")
+    .select("source_node_id, source_project_id")
+    .eq("target_node_id", nodeId);
+
+  if (sourceError) throw sourceError;
+
+  const { data: targetRefs, error: targetError } = await supabase
+    .from("mindmap_node_references")
+    .select("target_node_id, target_project_id")
+    .eq("source_node_id", nodeId);
+
+  if (targetError) throw targetError;
+
+  return {
+    sourceReferences: sourceRefs?.map(ref => ({
+      node_id: ref.source_node_id,
+      project_id: ref.source_project_id,
+    })) || [],
+    targetReferences: targetRefs?.map(ref => ({
+      node_id: ref.target_node_id,
+      project_id: ref.target_project_id,
+    })) || [],
+  };
+}
+
+export async function getMindmapNode(nodeId: string): Promise<MindmapNode> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { data, error } = await supabase
+    .from("mindmap_nodes")
+    .select("*")
+    .eq("id", nodeId)
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getNodeProjects(nodeId: string): Promise<{ project_id: string; project_title: string }[]> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { data, error } = await supabase
+    .rpc('get_node_projects', { node_id: nodeId });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createProjectNode(
+  currentProjectId: string,
+  linkedProjectId: string,
+  projectName: string,
+  nodeId?: string
+): Promise<{ node_id: string }> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const newNodeId = nodeId || crypto.randomUUID();
+
+  // First, create the node
+  const { error: nodeError } = await supabase
+    .from("mindmap_nodes")
+    .upsert({
+      id: newNodeId,
+      content: projectName,
+    }, {
+      onConflict: 'id'
+    });
+
+  if (nodeError) throw nodeError;
+
+  // Create node-project relationship for the current project
+  const { error: currentProjectError } = await supabase
+    .from("mindmap_node_projects")
+    .upsert({
+      node_id: newNodeId,
+      project_id: currentProjectId,
+      position_x: 100, // Default position
+      position_y: 100,
+      style: {
+        backgroundColor: "#ffffff",
+        borderColor: "#000000",
+        borderWidth: 2,
+        fontSize: 14,
+      },
+    }, {
+      onConflict: 'node_id,project_id'
+    });
+
+  if (currentProjectError) throw currentProjectError;
+
+  // Create node-project relationship for the linked project
+  const { error: linkedProjectError } = await supabase
+    .from("mindmap_node_projects")
+    .upsert({
+      node_id: newNodeId,
+      project_id: linkedProjectId,
+      position_x: 100, // Default position
+      position_y: 100,
+      style: {
+        backgroundColor: "#ffffff",
+        borderColor: "#000000",
+        borderWidth: 2,
+        fontSize: 14,
+      },
+    }, {
+      onConflict: 'node_id,project_id'
+    });
+
+  if (linkedProjectError) throw linkedProjectError;
+
+  return { node_id: newNodeId };
 }

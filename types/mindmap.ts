@@ -26,8 +26,15 @@ export interface MindmapNode {
   position: { x: number; y: number };
   style: Record<string, any>;
   project_id: string;
-  referenced_project_id?: string;
-  referenced_project_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface MindmapNodeProject {
+  node_id: string;
+  project_id: string;
+  position_x: number;
+  position_y: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -48,4 +55,15 @@ export interface MindmapData {
   project: MindmapProject;
   nodes: MindmapNode[];
   edges: MindmapEdge[];
+}
+
+export interface MindmapNodeProjectWithNode {
+  node_id: string;
+  position_x: number;
+  position_y: number;
+  style: Record<string, any> | null;
+  mindmap_nodes: {
+    id: string;
+    content: string;
+  };
 }

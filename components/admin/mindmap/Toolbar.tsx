@@ -4,7 +4,11 @@ import { ProjectSelectorModal } from "./ProjectSelectorModal";
 
 interface ToolbarProps {
   onAddNode: () => void;
-  onAddProjectNode: (projectId: string, projectName: string) => void;
+  onAddProjectNode: (
+    linkedProjectId: string,
+    projectName: string,
+    nodeId?: string
+  ) => void;
   onStyleChange: (style: any) => void;
   selectedNode: Node | null;
   selectedEdge: Edge | null;
@@ -28,8 +32,12 @@ export function Toolbar({
     fontSize: 14,
   };
 
-  const handleProjectSelect = (projectId: string, projectName: string) => {
-    onAddProjectNode(projectId, projectName);
+  const handleProjectSelect = (
+    linkedProjectId: string,
+    projectName: string,
+    nodeId?: string
+  ) => {
+    onAddProjectNode(linkedProjectId, projectName, nodeId);
     setIsModalOpen(false);
   };
 

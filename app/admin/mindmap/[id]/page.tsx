@@ -2,8 +2,6 @@
 
 import { Editor } from "@/components/admin/mindmap/Editor";
 import { useMindmap } from "@/hooks/useMindmap";
-import { Node, Edge, NodeChange, EdgeChange, Connection } from "reactflow";
-import { updateMindmapNodes, updateMindmapEdges } from "@/lib/mindmap";
 
 interface MindmapPageProps {
   params: {
@@ -21,9 +19,12 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     onNodesChange,
     onEdgesChange,
     onConnect,
-    onDeleteNode,
-    onDeleteEdge,
+    getMindmapTitle,
   } = useMindmap(id);
+
+  const title = getMindmapTitle();
+
+          
 
   if (loading) {
     return (
@@ -42,13 +43,15 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   }
 
   return (
+    <div className="h-full">
+      <h1 className="text-2xl font-bold mb-6">Mindmap {title}</h1>
       <Editor
-        initialNodes={nodes}
+        // initialNodes={nodes}
         initialEdges={edges}
         projectId={id}
-        onNodesChangeProp={onNodesChange}
         onEdgesChangeProp={onEdgesChange}
         onConnectProp={onConnect}
       />
+    </div>
   );
 }

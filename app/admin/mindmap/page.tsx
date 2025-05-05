@@ -18,6 +18,7 @@ export default async function MindmapPage() {
 
   return (
     <div>
+      <h1 className="text-2xl font-bold mb-6">Mindmap</h1>
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold">Your Mindmaps</h2>
         <Link href="/admin/mindmap/new">

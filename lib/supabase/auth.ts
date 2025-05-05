@@ -1,4 +1,5 @@
-import { supabase } from "./config";
+import { supabase } from "./client";
+import { Session } from "@supabase/supabase-js";
 
 export const signIn = async (email: string, password: string) => {
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -25,7 +26,7 @@ export const getSession = async () => {
 };
 
 export const onAuthStateChange = (
-  callback: (event: string, session: any) => void
+  callback: (event: string, session: Session | null) => void
 ) => {
   return supabase.auth.onAuthStateChange(callback);
 };

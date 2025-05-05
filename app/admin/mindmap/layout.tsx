@@ -12,7 +12,7 @@ export default function MindmapLayout({
 }) {
   return (
     <div className="h-full">
-      <h1 className="text-2xl font-bold mb-6">Mindmap</h1>
+      {/* <h1 className="text-2xl font-bold mb-6">Mindmap</h1> */}
       <div className="h-[calc(100vh-10rem)]">{children}</div>
     </div>
   );

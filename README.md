@@ -109,6 +109,12 @@ cp .env.example .env.local
 npm run dev
 ```
 
+5. Atualizar os tipos de dados
+
+```bash
+npx supabase gen types typescript --project-id "your-project-id" --schema public > types/supabase.ts
+```
+
 ## Próximos Passos
 
 1. Implementar autenticação básica

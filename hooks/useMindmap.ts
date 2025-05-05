@@ -7,6 +7,7 @@ import {
   updateMindmapEdges,
   deleteMindmapNode,
   deleteMindmapEdge,
+  createProjectNode,
 } from "@/lib/mindmap";
 import { MindmapNode, MindmapEdge } from "@/types/mindmap";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -19,8 +20,6 @@ function convertToReactFlowNode(node: MindmapNode): Node {
     data: {
       content: node.content,
       style: node.style || {},
-      referencedProjectId: node.referenced_project_id,
-      referencedProjectName: node.referenced_project_name,
       onChange: (newText: string) => {
         // This will be set by the Editor component
         return newText;
@@ -48,6 +47,15 @@ export function useMindmap(projectId: string) {
   const [error, setError] = useState<Error | null>(null);
   const supabase = createClientComponentClient();
 
+  const getMindmapTitle = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error("Not authenticated");
+    }
+    const { data } = await supabase.from("mindmap_projects").select("title").eq("id", projectId).single();
+    return data?.title;
+  }, [projectId, supabase]);
+
   // Handle text changes
   const handleTextChange = useCallback((nodeId: string, newText: string) => {
     setNodes((nds) =>
@@ -70,13 +78,8 @@ export function useMindmap(projectId: string) {
   useEffect(() => {
     async function loadMindmap() {
       try {
-        console.log('useMindmap - Loading mindmap for projectId:', projectId);
         setLoading(true);
         const data = await getMindmapProject(projectId, Date.now().toString());
-        console.log('useMindmap - Data loaded:', {
-          nodes: data.nodes,
-          edges: data.edges
-        });
         setNodes(data.nodes.map(node => ({
           ...convertToReactFlowNode(node),
           data: {
@@ -87,7 +90,7 @@ export function useMindmap(projectId: string) {
         setEdges(data.edges.map(convertToReactFlowEdge));
         setError(null);
       } catch (err) {
-        console.error('useMindmap - Error loading data:', err);
+        console.error('Error loading data:', err);
         setError(err as Error);
         
         // Check if it's a connection timeout error
@@ -109,72 +112,69 @@ export function useMindmap(projectId: string) {
 
   // Handle node changes
   const onNodesChange = useCallback(
-    async (changes: NodeChange[]) => {
+    async ({changes, linkedProjectId, skipSave}: {changes: NodeChange[], linkedProjectId?: string, skipSave?: boolean}) => {
       try {
-        console.log('useMindmap - Node changes received:', changes);
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
           throw new Error("Not authenticated");
         }
-
-        // Check if this is a deletion change
-        const deletionChange = changes.find(change => change.type === 'remove');
-        if (deletionChange) {
-          console.log('useMindmap - Node deletion detected:', deletionChange);
-          // First delete the node from the database
-          await deleteMindmapNode(deletionChange.id);
-          // Then update local state
-          const updatedNodes = nodes.filter(node => node.id !== deletionChange.id);
-          console.log('useMindmap - Nodes after deletion:', updatedNodes);
-          setNodes(updatedNodes);
-          return;
-        }
+        
 
         // For other changes, preserve the entire data object
-        const updatedNodes = applyNodeChanges(changes, nodes).map(updatedNode => {
-          const originalNode = nodes.find(node => node.id === updatedNode.id);
-          if (originalNode) {
-            return {
-              ...updatedNode,
-              data: {
-                ...originalNode.data,
-                ...updatedNode.data,
-              },
-            };
-          }
-          return updatedNode;
-        });
+        const updatedNodes = applyNodeChanges(changes, nodes)
+        // .map(updatedNode => {
+        //   const originalNode = nodes.find(node => node.id === updatedNode.id);
+        //   if (originalNode) {
+        //     return {
+        //       ...updatedNode,
+        //       data: {
+        //         ...originalNode.data,
+        //         ...updatedNode.data,
+        //       },
+        //     };
+        //   }
+        //   return updatedNode;
+        // });
 
-        console.log('useMindmap - Updated nodes:', updatedNodes);
         setNodes(updatedNodes);
         
-        // Save to database
-        await updateMindmapNodes(projectId, updatedNodes);
+        // Only save to database if skipSave is not true
+        if (!skipSave) {
+          // Check if this is a deletion change
+          const deletionChange = changes.find(
+            (change) => change.type === "remove"
+          );
+          if (deletionChange) {
+            // First delete the node from the database
+            await deleteMindmapNode(deletionChange.id, projectId);
+            // Then update local state
+            const updatedNodes = nodes.filter(
+              (node) => node.id !== deletionChange.id
+            );
+            setNodes(updatedNodes);
+            return;
+          }
+
+          await updateMindmapNodes({
+            projectId,
+            nodes: updatedNodes,
+            linkedProjectId,
+          });
+        }
       } catch (err) {
-        console.error('useMindmap - Error updating nodes:', err);
+        console.error('Error updating nodes:', err);
         setError(
           err instanceof Error ? err : new Error("Failed to update nodes")
         );
-        
-        // Check if it's a connection timeout error
-        if (err instanceof Error && 
-            err.cause && 
-            typeof err.cause === 'object' && 
-            'code' in err.cause && 
-            err.cause.code === 'UND_ERR_CONNECT_TIMEOUT') {
-          // Redirect to login page
-          router.push('/login');
-        }
       }
     },
-    [projectId, nodes, supabase, router]
+    [projectId, nodes, supabase]
   );
 
   // Handle edge changes
   const onEdgesChange = useCallback(
     async (changes: EdgeChange[]) => {
       try {
-        console.log('useMindmap - Edge changes received:', changes);
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
           throw new Error("Not authenticated");
@@ -183,25 +183,22 @@ export function useMindmap(projectId: string) {
         // Check if this is a deletion change
         const deletionChange = changes.find(change => change.type === 'remove');
         if (deletionChange) {
-          console.log('useMindmap - Edge deletion detected:', deletionChange);
           // First delete the edge from the database
           await deleteMindmapEdge(deletionChange.id);
           // Then update local state
           const updatedEdges = edges.filter(edge => edge.id !== deletionChange.id);
-          console.log('useMindmap - Edges after deletion:', updatedEdges);
           setEdges(updatedEdges);
           return;
         }
 
         // For other changes, proceed as normal
         const updatedEdges = applyEdgeChanges(changes, edges);
-        console.log('useMindmap - Updated edges:', updatedEdges);
         setEdges(updatedEdges);
         
         // Save to database
         await updateMindmapEdges(projectId, updatedEdges);
       } catch (err) {
-        console.error('useMindmap - Error updating edges:', err);
+        console.error('Error updating edges:', err);
         setError(
           err instanceof Error ? err : new Error("Failed to update edges")
         );
@@ -236,46 +233,6 @@ export function useMindmap(projectId: string) {
     [projectId, edges, supabase]
   );
 
-  // Handle node deletion
-  const onDeleteNode = useCallback(
-    async (nodeId: string) => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          throw new Error("Not authenticated");
-        }
-
-        await deleteMindmapNode(nodeId);
-        setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-      } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error("Failed to delete node")
-        );
-      }
-    },
-    [supabase]
-  );
-
-  // Handle edge deletion
-  const onDeleteEdge = useCallback(
-    async (edgeId: string) => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          throw new Error("Not authenticated");
-        }
-
-        await deleteMindmapEdge(edgeId);
-        setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
-      } catch (err) {
-        setError(
-          err instanceof Error ? err : new Error("Failed to delete edge")
-        );
-      }
-    },
-    [supabase]
-  );
-
   return {
     nodes,
     edges,
@@ -284,7 +241,6 @@ export function useMindmap(projectId: string) {
     onNodesChange,
     onEdgesChange,
     onConnect,
-    onDeleteNode,
-    onDeleteEdge,
+    getMindmapTitle,
   };
 }
