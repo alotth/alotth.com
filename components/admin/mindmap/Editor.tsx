@@ -82,7 +82,13 @@ export function Editor({
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [setNodes]);
+    if (onNodesChangeProp) {
+      onNodesChangeProp([{
+        type: 'add',
+        item: newNode,
+      }]);
+    }
+  }, [setNodes, onNodesChangeProp]);
 
   // Add new project node
   const handleAddProjectNode = useCallback((projectId: string, projectName: string) => {
