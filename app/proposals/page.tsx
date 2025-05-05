@@ -1,6 +1,17 @@
-import { supabase } from "@/lib/supabase/config";
+import { supabase } from "@/lib/supabase/client";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { getThemeById } from "@/lib/themes";
+
+interface Proposal {
+  id: string;
+  title: string;
+  content: string | null;
+  theme_id: string;
+  is_active: boolean;
+  share_key: string;
+  created_at: string;
+  updated_at: string;
+}
 
 interface ProposalPageProps {
   searchParams: {

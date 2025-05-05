@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/config";
+import { supabase } from "@/lib/supabase/client";
 import { themes, getThemeById } from "@/lib/themes";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 
 interface Proposal {
   id: string;
   title: string;
-  content: string;
+  content: string | null;
   theme_id: string;
   is_active: boolean;
+  share_key: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ProposalPageProps {

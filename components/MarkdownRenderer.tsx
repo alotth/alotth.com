@@ -2,7 +2,7 @@ import ReactMarkdown from "react-markdown";
 import { Theme } from "@/lib/themes";
 
 interface MarkdownRendererProps {
-  content: string;
+  content: string | null;
   theme: Theme;
 }
 
@@ -11,6 +11,10 @@ export default function MarkdownRenderer({
   theme,
 }: MarkdownRendererProps) {
   const { styles } = theme;
+
+  if (!content) {
+    return null;
+  }
 
   return (
     <div className={styles.container}>
