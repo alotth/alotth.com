@@ -8,9 +8,9 @@ export default function AdminDashboard() {
       </header>
 
       <div className="flex flex-col gap-6">
-        <div className="p-6 bg-white rounded-lg shadow-md">
+        <div className="p-6 bg-white dark:bg-gray-800 rounded-lg">
           <h2 className="text-xl font-semibold mb-4">Propostas</h2>
-          <p className="text-gray-600 mb-4">
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
             Gerencie suas propostas em markdown
           </p>
           <div className="flex items-center space-x-4">
@@ -23,9 +23,9 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="p-6 bg-white rounded-lg shadow-md">
+        <div className="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Mindmap</h2>
-          <p className="text-gray-600 mb-4">
+          <p className="text-gray-600 dark:text-gray-300 mb-4">
             Mindmap para organizar suas ideias
           </p>
           <div className="flex items-center space-x-4">
@@ -37,7 +37,7 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
-      </div>  
+      </div>
     </div>
   );
 }

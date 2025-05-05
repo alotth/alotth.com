@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { useTheme } from "@/lib/theme-context";
 
 function AuthGuardContent({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -11,6 +12,7 @@ function AuthGuardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const supabase = createClientComponentClient();
+  const { theme } = useTheme();
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -73,7 +75,7 @@ function AuthGuardContent({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'dark bg-gray-800 text-white' : 'bg-white text-gray-900'}`}>
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
@@ -83,10 +85,12 @@ function AuthGuardContent({ children }: { children: React.ReactNode }) {
 }
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { theme } = useTheme();
+  
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
+        <div className={`min-h-screen flex items-center justify-center ${theme === 'dark' ? 'dark bg-gray-800 text-white' : 'bg-white text-gray-900'}`}>
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
         </div>
       }

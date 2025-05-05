@@ -79,7 +79,7 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
             onChange={(e) => setText(e.target.value)}
             onBlur={handleBlur}
             className={cn(
-              "w-full font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none",
+              "w-full font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900",
               isExpanded ? "min-h-[200px]" : "min-h-[100px]",
               "overflow-y-auto max-h-[500px]"
             )}
@@ -97,7 +97,7 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
           <div 
             ref={contentRef}
             className={cn(
-              "prose prose-sm max-w-none",
+              "prose prose-sm max-w-none text-gray-900",
               !isExpanded && "line-clamp-3"
             )}
           >

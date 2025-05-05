@@ -32,7 +32,7 @@ export function Toolbar({
   };
 
   return (
-    <div className="flex flex-col gap-2 bg-white p-2 rounded-md shadow-md">
+    <div className="flex flex-col gap-2 bg-white p-2 rounded-md shadow-md text-gray-900">
       <button
         onClick={onAddNode}
         className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
@@ -49,10 +49,10 @@ export function Toolbar({
 
       {selectedNode && (
         <div className="mt-4 p-2 border rounded">
-          <h3 className="text-sm font-medium mb-2">Node Style</h3>
+          <h3 className="text-sm font-medium mb-2 text-gray-900">Node Style</h3>
           <div className="space-y-2">
             <div>
-              <label className="text-xs block">Background Color</label>
+              <label className="text-xs block text-gray-900">Background Color</label>
               <input
                 type="color"
                 value={nodeStyle.backgroundColor || defaultStyle.backgroundColor}
@@ -66,7 +66,7 @@ export function Toolbar({
               />
             </div>
             <div>
-              <label className="text-xs block">Border Color</label>
+              <label className="text-xs block text-gray-900">Border Color</label>
               <input
                 type="color"
                 value={nodeStyle.borderColor || defaultStyle.borderColor}
@@ -80,7 +80,7 @@ export function Toolbar({
               />
             </div>
             <div>
-              <label className="text-xs block">Font Size</label>
+              <label className="text-xs block text-gray-900">Font Size</label>
               <input
                 type="number"
                 value={nodeStyle.fontSize || defaultStyle.fontSize}
@@ -90,7 +90,7 @@ export function Toolbar({
                     fontSize: parseInt(e.target.value),
                   })
                 }
-                className="w-full px-2 py-1 text-sm border rounded"
+                className="w-full px-2 py-1 text-sm border rounded text-gray-900"
                 min="8"
                 max="32"
               />

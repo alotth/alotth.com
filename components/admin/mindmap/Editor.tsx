@@ -168,6 +168,7 @@ export function Editor({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
+        className="text-gray-900"
       >
         <Background />
         <Controls />
