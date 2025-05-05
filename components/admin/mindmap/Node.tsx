@@ -23,6 +23,7 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowExpand, setShouldShowExpand] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (contentRef.current && !isExpanded) {
@@ -31,6 +32,13 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
       setShouldShowExpand(contentHeight > containerHeight);
     }
   }, [text, isExpanded]);
+
+  // Keep textarea focused when styles change
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [data.style, isEditing]);
 
   const handleDoubleClick = () => {
     setIsEditing(true);
@@ -53,9 +61,14 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
       className={cn(
         "px-4 py-2 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200",
         isExpanded ? "w-[600px]" : "w-[200px]",
-        !isExpanded && !isEditing && "max-h-[100px] overflow-hidden"
+        !isExpanded && !isEditing && "max-h-[120px] overflow-hidden"
       )}
-      style={data.style}
+      style={{
+        backgroundColor: data.style?.backgroundColor || "#ffffff",
+        borderColor: data.style?.borderColor || "#000000",
+        borderWidth: data.style?.borderWidth || 2,
+        fontSize: data.style?.fontSize || 14,
+      }}
       onDoubleClick={handleDoubleClick}
     >
       <Handle
@@ -75,6 +88,7 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
            * 4. Add a transparent overlay that captures scroll events
            */}
           <textarea
+            ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onBlur={handleBlur}
@@ -83,25 +97,67 @@ export const MindmapNode = memo(({ data, isConnectable }: NodeProps<MindmapNodeD
               isExpanded ? "min-h-[200px]" : "min-h-[100px]",
               "overflow-y-auto max-h-[500px]"
             )}
+            style={{
+              fontSize: data.style?.fontSize || 14,
+            }}
             autoFocus
             onMouseEnter={(e) => {
-              e.currentTarget.style.overflowY = 'auto';
+              e.currentTarget.style.overflowY = "auto";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.overflowY = 'hidden';
+              e.currentTarget.style.overflowY = "hidden";
             }}
           />
         </div>
       ) : (
         <div className="relative">
-          <div 
+          <div
             ref={contentRef}
             className={cn(
               "prose prose-sm max-w-none text-gray-900",
               !isExpanded && "line-clamp-3"
             )}
           >
-            <ReactMarkdown>{text}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                h1: ({ children }) => (
+                  <h1 className="text-2xl font-bold mb-2">{children}</h1>
+                ),
+                h2: ({ children }) => (
+                  <h2 className="text-xl font-bold mb-2">{children}</h2>
+                ),
+                h3: ({ children }) => (
+                  <h3 className="text-lg font-bold mb-2">{children}</h3>
+                ),
+                p: ({ children }) => <p className="mb-2">{children}</p>,
+                ul: ({ children }) => (
+                  <ul className="list-disc pl-4 mb-2">{children}</ul>
+                ),
+                ol: ({ children }) => (
+                  <ol className="list-decimal pl-4 mb-2">{children}</ol>
+                ),
+                li: ({ children }) => <li className="mb-1">{children}</li>,
+                strong: ({ children }) => (
+                  <strong className="font-bold">{children}</strong>
+                ),
+                em: ({ children }) => <em className="italic">{children}</em>,
+                code: ({ children }) => (
+                  <code className="bg-gray-100 px-1 rounded">{children}</code>
+                ),
+                pre: ({ children }) => (
+                  <pre className="bg-gray-100 p-2 rounded mb-2 overflow-x-auto">
+                    {children}
+                  </pre>
+                ),
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-gray-300 pl-4 italic mb-2">
+                    {children}
+                  </blockquote>
+                ),
+              }}
+            >
+              {text}
+            </ReactMarkdown>
           </div>
           {!isEditing && shouldShowExpand && (
             <button

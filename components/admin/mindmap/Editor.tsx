@@ -152,13 +152,60 @@ export function Editor({
     [onEdgesChange, onEdgesChangeProp]
   );
 
+  // Handle style changes
+  const handleStyleChange = useCallback((newStyle: any) => {
+    if (!selectedNode) return;
+
+    const updatedNodes = nodes.map((node) => {
+      if (node.id === selectedNode.id) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            style: {
+              ...node.data.style,
+              ...newStyle,
+            },
+          },
+        };
+      }
+      return node;
+    });
+
+    setNodes(updatedNodes);
+    
+    // Update the selected node reference with new style
+    setSelectedNode(prevNode => {
+      if (!prevNode) return null;
+      return {
+        ...prevNode,
+        data: {
+          ...prevNode.data,
+          style: {
+            ...prevNode.data.style,
+            ...newStyle,
+          },
+        },
+      };
+    });
+    
+    // Trigger node change event to save to database
+    if (onNodesChangeProp) {
+      onNodesChangeProp([{
+        type: 'select',
+        id: selectedNode.id,
+        selected: true,
+      }]);
+    }
+  }, [selectedNode, nodes, setNodes, onNodesChangeProp]);
+
   return (
     <div className="h-full relative">
       <div className="absolute top-4 right-4 z-10">
         <Toolbar
           onAddNode={handleAddNode}
           onAddProjectNode={handleAddProjectNode}
-          onStyleChange={() => {}}
+          onStyleChange={handleStyleChange}
           selectedNode={selectedNode}
           selectedEdge={null}
         />
