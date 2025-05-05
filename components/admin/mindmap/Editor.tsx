@@ -208,6 +208,7 @@ export function Editor({
           onStyleChange={handleStyleChange}
           selectedNode={selectedNode}
           selectedEdge={null}
+          currentProjectId={projectId}
         />
       </div>
       <ReactFlow

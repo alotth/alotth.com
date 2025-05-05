@@ -6,12 +6,14 @@ interface ProjectSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (projectId: string, projectName: string) => void;
+  currentProjectId: string;
 }
 
 export function ProjectSelectorModal({
   isOpen,
   onClose,
   onSelect,
+  currentProjectId,
 }: ProjectSelectorModalProps) {
   const [projects, setProjects] = useState<MindmapProject[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,7 @@ export function ProjectSelectorModal({
         const { data, error } = await supabase
           .from("mindmap_projects")
           .select()
+          .neq("id", currentProjectId)
           .order("created_at", { ascending: false });
 
         if (error) throw error;
@@ -43,7 +46,7 @@ export function ProjectSelectorModal({
     if (isOpen) {
       loadProjects();
     }
-  }, [isOpen, supabase]);
+  }, [isOpen, supabase, currentProjectId]);
 
   const filteredProjects = projects.filter((project) =>
     project.title.toLowerCase().includes(searchTerm.toLowerCase())

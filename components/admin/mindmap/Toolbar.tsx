@@ -8,6 +8,7 @@ interface ToolbarProps {
   onStyleChange: (style: any) => void;
   selectedNode: Node | null;
   selectedEdge: Edge | null;
+  currentProjectId: string;
 }
 
 export function Toolbar({
@@ -16,6 +17,7 @@ export function Toolbar({
   onStyleChange,
   selectedNode,
   selectedEdge,
+  currentProjectId,
 }: ToolbarProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const nodeStyle = selectedNode?.data?.style || {};
@@ -103,6 +105,7 @@ export function Toolbar({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSelect={handleProjectSelect}
+        currentProjectId={currentProjectId}
       />
     </div>
   );
