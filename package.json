@@ -13,8 +13,10 @@
     "db:stop": "supabase stop"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.5",
     "@radix-ui/react-select": "^2.2.3",
     "@radix-ui/react-slot": "^1.2.0",
+    "@radix-ui/react-toast": "^1.2.14",
     "@reactflow/background": "^11.3.14",
     "@reactflow/controls": "^11.2.14",
     "@reactflow/core": "^11.11.4",

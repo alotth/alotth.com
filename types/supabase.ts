@@ -207,6 +207,13 @@ export type Database = {
           position_y: number
         }[]
       }
+      cleanup_orphaned_nodes: {
+        Args: Record<string, never>
+        Returns: Array<{
+          deleted_node_id: string
+          deleted_node_content: string
+        }>
+      }
     }
     Enums: {
       [_ in never]: never

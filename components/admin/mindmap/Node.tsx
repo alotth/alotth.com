@@ -16,6 +16,7 @@ interface MindmapNodeData {
     fontSize?: number;
   };
   onChange?: (newText: string) => void;
+  lastProjectNodeAdded?: number; // Timestamp of last project node addition
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -25,7 +26,7 @@ const truncateText = (text: string, maxLength: number) => {
   return cleanText.slice(0, 20) + "...";
 };
 
-export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapNodeData>) => {
+export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapNodeData>): JSX.Element => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.content);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -34,7 +35,6 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pathname = usePathname();
-  // Extrai o id do projeto da URL: /admin/project/[id]
   const currentProjectId = pathname?.split("/admin/project/")[1]?.split("/")[0] || "";
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     }
 
     loadProjects();
-  }, [id]);
+  }, [id, data.lastProjectNodeAdded]);
 
   // Keep textarea focused when styles change
   useEffect(() => {
@@ -102,7 +102,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     >
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         isConnectable={isConnectable}
         className="w-2 h-2 !bg-stone-400"
       />
@@ -224,7 +224,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
       )}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         isConnectable={isConnectable}
         className="w-2 h-2 !bg-stone-400"
       />

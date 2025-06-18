@@ -19,6 +19,7 @@ export const MindmapEdge = memo(
       targetX,
       targetY,
       targetPosition,
+      curvature: 0.3,
     });
 
     return (
@@ -29,6 +30,8 @@ export const MindmapEdge = memo(
           ...style,
           strokeWidth: 2,
           stroke: "#94a3b8",
+          strokeDasharray: "none",
+          animation: "none",
         }}
       />
     );

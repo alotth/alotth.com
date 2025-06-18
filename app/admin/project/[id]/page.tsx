@@ -16,6 +16,11 @@ import {
 import NoteCard from "@/components/note/NoteCard";
 import { v4 as uuidv4 } from "uuid";
 import { Dispatch, SetStateAction } from "react";
+import { Node, Edge, NodeChange } from "reactflow";
+import Dagre from "@dagrejs/dagre";
+import { MindmapProject } from "@/types/mindmap";
+import { getAvailableProjects } from "@/lib/mindmap";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface MindmapPageProps {
   params: {
@@ -94,6 +99,62 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
   );
 };
 
+// Add layout function
+const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
+  if (!nodes.length) return { nodes, edges };
+
+  // Create a new graph
+  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+  
+  // Set graph direction and spacing
+  g.setGraph({ 
+    rankdir: 'LR', // Left to Right layout for tree-like structure
+    align: 'DL', // Down-Left alignment
+    ranker: 'tight-tree', // Use tight-tree for more compact tree layout
+    ranksep: 150, // Horizontal spacing between ranks
+    nodesep: 80, // Vertical spacing between nodes
+    edgesep: 30, // Edge spacing
+    marginx: 20, // Margin in x direction
+    marginy: 20, // Margin in y direction
+  });
+
+  // Add nodes with their dimensions
+  nodes.forEach((node) => {
+    g.setNode(node.id, { 
+      width: 200,
+      height: 60,
+      label: node.data.content 
+    });
+  });
+
+  // Add edges
+  edges.forEach((edge) => {
+    g.setEdge(edge.source, edge.target);
+  });
+
+  // Run the layout
+  Dagre.layout(g);
+
+  // Get the positioned nodes with proper centering
+  const positionedNodes = nodes.map((node) => {
+    const nodeWithPosition = g.node(node.id);
+    return {
+      ...node,
+      // We are shifting the dagre node position (anchor=center center) to the top left
+      // so it matches the React Flow node anchor point (top left).
+      position: {
+        x: nodeWithPosition.x - nodeWithPosition.width / 2,
+        y: nodeWithPosition.y - nodeWithPosition.height / 2,
+      },
+      // Add source/target positions based on graph direction
+      targetPosition: 'left',
+      sourcePosition: 'right',
+    };
+  });
+
+  return { nodes: positionedNodes, edges };
+};
+
 export default function MindmapPage({ params }: MindmapPageProps) {
   const { id } = params;
   const [viewType, setViewType] = useState<ViewType>(() => {
@@ -103,6 +164,10 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     }
     return "mindmap";
   });
+  const [lastProjectNodeAdded, setLastProjectNodeAdded] = useState<number>(0);
+  const [projects, setProjects] = useState<MindmapProject[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
   const {
     nodes,
@@ -147,14 +212,36 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     };
   }, [getMindmapTitle]);
 
-  // Add new node
+  // Load projects
+  useEffect(() => {
+    let isMounted = true;
+    async function loadProjects() {
+      try {
+        const availableProjects = await getAvailableProjects(id);
+        if (isMounted) {
+          setProjects(availableProjects);
+          setProjectsLoading(false);
+        }
+      } catch (err) {
+        console.error("Error loading projects:", err);
+        if (isMounted) setProjectsLoading(false);
+      }
+    }
+    loadProjects();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
+  // Modify handleAddNode to NOT use layout
   const handleAddNode = useCallback(async () => {
     const timestamp = Date.now();
     console.log(`[PAGE-${timestamp}] handleAddNode chamado`);
     try {
-      await addNode({
-        id: uuidv4(),
-        position: { x: 100, y: 100 },
+      const newNodeId = uuidv4();
+      const newNode = {
+        id: newNodeId,
+        position: { x: 0, y: 0 },
         data: {
           content: "New Node",
           style: {
@@ -164,7 +251,10 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             fontSize: 14,
           },
         },
-      });
+      };
+
+      // Add node to database
+      await addNode(newNode);
       console.log(`[PAGE-${timestamp}] ✅ addNode concluído`);
     } catch (error) {
       console.error(`[PAGE-${timestamp}] ❌ Erro em handleAddNode:`, error);
@@ -188,6 +278,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             },
           },
         }, linkedProjectId);
+        setLastProjectNodeAdded(Date.now());
       } catch (error) {
         console.error("Error adding project node:", error);
       }
@@ -301,94 +392,182 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     }
   }, [creatingNote]);
 
+  // Add handleAutoOrganize for the toolbar
+  const handleAutoOrganize = useCallback(() => {
+    if (nodes.length > 0) {
+      const { nodes: layoutedNodes } = getLayoutedElements(nodes, edges);
+      
+      // Update positions in state
+      const changes = layoutedNodes.map(node => ({
+        type: 'position' as const,
+        id: node.id,
+        position: node.position,
+      }));
+      onNodesChange(changes);
+
+      // Save each node's new position to the database
+      layoutedNodes.forEach(node => {
+        updateNode(node.id, { position: node.position });
+      });
+    }
+  }, [nodes, edges, onNodesChange, updateNode]);
+
+  // Modify the nodes to include lastProjectNodeAdded
+  const nodesWithTimestamp = nodes.map(node => ({
+    ...node,
+    data: {
+      ...node.data,
+      lastProjectNodeAdded,
+    }
+  }));
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-gray-900"></div>
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-red-500">Error: {error.message}</div>
       </div>
     );
   }
 
   return (
-    <div className="h-full">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Project {projectTitle ?? ""}</h1>
-          <Select
-            value={viewType}
-            onValueChange={(value: string) => setViewType(value as ViewType)}
+    <div className="flex h-screen bg-background text-foreground">
+      {/* Project List Sidebar */}
+      <div 
+        className={`border-r border-border bg-background transition-all duration-200 ${
+          sidebarCollapsed ? 'w-12' : 'w-64'
+        } flex flex-col`}
+      >
+        <div className="flex items-center justify-between p-2 border-b border-border">
+          {!sidebarCollapsed && <h3 className="font-medium">Projects</h3>}
+          <button
+            onClick={() => setSidebarCollapsed(prev => !prev)}
+            className="p-1 hover:bg-accent rounded-full"
           >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select view" />
-            </SelectTrigger>
-            <SelectContent className="bg-white dark:bg-gray-800">
-              <SelectItem value="mindmap">Mindmap View</SelectItem>
-              <SelectItem value="notes">Notes View</SelectItem>
-            </SelectContent>
-          </Select>
+            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
         </div>
-        <Link href="/admin/project">
-          <Button variant="outline">Back to Projects</Button>
-        </Link>
+        
+        <div className="flex-1 overflow-y-auto">
+          {projectsLoading ? (
+            <div className="flex items-center justify-center h-32">
+              <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <div className="space-y-1 p-2">
+              {projects.map((project) => (
+                <Link 
+                  key={project.id} 
+                  href={`/admin/project/${project.id}`}
+                  className={`block p-2 rounded-md transition-colors ${
+                    project.id === id 
+                      ? 'bg-accent text-accent-foreground' 
+                      : 'hover:bg-accent/50'
+                  }`}
+                >
+                  {!sidebarCollapsed && (
+                    <div>
+                      <div className="font-medium truncate">{project.title}</div>
+                      {project.description && (
+                        <div className="text-xs text-muted-foreground truncate">
+                          {project.description}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {viewType === "mindmap" ? (
-        <EditorMindmap
-          projectId={id}
-          handleAddNode={handleAddNode}
-          handleAddProjectNode={handleAddProjectNode}
-          nodes={nodes}
-          edges={edges}
-          updateNode={updateNode}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onImportNodes={handleImportNodes}
-        />
-      ) : (
-        <>
-          <div className="flex items-center mb-6">
-            <Toolbar
-              onAddNode={handleAddNode}
-              onAddProjectNode={handleAddProjectNode}
-              onStyleChange={() => {}}
-              onImportJSON={() => {}}
-              selectedNode={null}
-              selectedEdge={null}
-              currentProjectId={id}
-            />
-            <div className="w-full flex items-center justify-center gap-4">
-              <QuickCreateNote
-                creatingNote={creatingNote}
-                setCreatingNote={setCreatingNote}
-                newNoteText={newNoteText}
-                setNewNoteText={setNewNoteText}
-                saveNewNote={saveNewNote}
-                textareaRef={textareaRef}
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold">Project {projectTitle ?? ""}</h1>
+            <Select
+              value={viewType}
+              onValueChange={(value: string) => setViewType(value as ViewType)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select view" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mindmap">Mindmap View</SelectItem>
+                <SelectItem value="notes">Notes View</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Link href="/admin/project">
+            <Button variant="outline">Back to Projects</Button>
+          </Link>
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          {viewType === "mindmap" ? (
+            <div className="h-full">
+              <EditorMindmap
+                projectId={id}
+                handleAddNode={handleAddNode}
+                handleAddProjectNode={handleAddProjectNode}
+                nodes={nodesWithTimestamp}
+                edges={edges}
+                updateNode={updateNode}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onImportNodes={handleImportNodes}
+                onAutoOrganize={handleAutoOrganize}
               />
             </div>
-          </div>
+          ) : (
+            <div className="p-6 overflow-auto">
+              <div className="flex items-center mb-6">
+                <Toolbar
+                  onAddNode={handleAddNode}
+                  onAddProjectNode={handleAddProjectNode}
+                  onStyleChange={() => {}}
+                  onImportJSON={() => {}}
+                  selectedNode={null}
+                  selectedEdge={null}
+                  currentProjectId={id}
+                  onAutoOrganize={handleAutoOrganize}
+                />
+                <div className="w-full flex items-center justify-center gap-4">
+                  <QuickCreateNote
+                    creatingNote={creatingNote}
+                    setCreatingNote={setCreatingNote}
+                    newNoteText={newNoteText}
+                    setNewNoteText={setNewNoteText}
+                    saveNewNote={saveNewNote}
+                    textareaRef={textareaRef}
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {nodes.map((node) => (
-              <NoteCard
-                key={node.id}
-                id={node.id}
-                content={node.data.content}
-                onContentChange={handleNoteContentChange}
-              />
-            ))}
-          </div>
-        </>
-      )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {nodes.map((node) => (
+                  <NoteCard
+                    key={node.id}
+                    id={node.id}
+                    content={node.data.content}
+                    onContentChange={handleNoteContentChange}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

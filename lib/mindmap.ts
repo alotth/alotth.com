@@ -583,12 +583,29 @@ export async function deleteMindmapProject(projectId: string): Promise<void> {
     throw new Error("Not authenticated");
   }
 
-  const { error } = await supabase
-    .from("mindmap_projects")
-    .delete()
-    .eq("id", projectId);
+  try {
+    // Delete the project (this will cascade delete all node-project relationships)
+    const { error: deleteError } = await supabase
+      .from("mindmap_projects")
+      .delete()
+      .eq("id", projectId);
 
-  if (error) throw error;
+    if (deleteError) throw deleteError;
+
+    // Clean up orphaned nodes
+    const { data: deletedNodes, error: cleanupError } = await supabase
+      .rpc('cleanup_orphaned_nodes');
+
+    if (cleanupError) {
+      console.error('Error cleaning up orphaned nodes:', cleanupError);
+      // We don't throw here because the project was already deleted successfully
+    } else {
+      console.log(`Cleaned up ${deletedNodes?.length || 0} orphaned nodes`);
+    }
+  } catch (error) {
+    console.error('Error deleting project:', error);
+    throw error;
+  }
 }
 
 export async function getMindmapProjects(): Promise<MindmapProject[]> {

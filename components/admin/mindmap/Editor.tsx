@@ -50,6 +50,7 @@ interface EditorProps {
     nodes: { content: string; position: { x: number; y: number }; style?: any }[];
     edges: { source: string; target: string }[];
   }) => void;
+  onAutoOrganize: () => void;
 }
 
 export function EditorMindmap({
@@ -63,6 +64,7 @@ export function EditorMindmap({
   onEdgesChange,
   onConnect,
   onImportNodes,
+  onAutoOrganize,
 }: EditorProps) {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [pendingPositionSaves, setPendingPositionSaves] = useState<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -169,6 +171,7 @@ export function EditorMindmap({
           selectedNode={selectedNode}
           selectedEdge={null}
           currentProjectId={projectId}
+          onAutoOrganize={onAutoOrganize}
         />
       </div>
       <ReactFlow

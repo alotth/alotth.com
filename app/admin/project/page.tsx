@@ -27,6 +27,9 @@ import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import { supabase } from "@/lib/supabase/client";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { toast } from "@/components/ui/use-toast";
+import { Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 
 export default function MindmapPage() {
   const [projects, setProjects] = useState<MindmapProject[]>([]);
@@ -37,6 +40,7 @@ export default function MindmapPage() {
   const [flowEdges, setFlowEdges] = useState<FlowEdge[]>([]);
   const [initializing, setInitializing] = useState(true);
   const router = useRouter();
+  const { toast } = useToast();
 
   // Markdown components configuration
   const markdownComponents: Components = {
@@ -258,11 +262,27 @@ export default function MindmapPage() {
   );
 
   const deleteProject = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este projeto?")) {
+      return;
+    }
+
     try {
       await deleteMindmapProject(id);
       setProjects((prev) => prev.filter((project) => project.id !== id));
+      
+      toast({
+        title: "Projeto excluído",
+        description: "O projeto foi excluído com sucesso e os nodes órfãos foram limpos.",
+        duration: 5000,
+      });
     } catch (error) {
-      console.error("Error deleting project:", error);
+      console.error('Error deleting project:', error);
+      toast({
+        title: "Erro ao excluir projeto",
+        description: "Não foi possível excluir o projeto. Tente novamente.",
+        variant: "destructive",
+        duration: 5000,
+      });
     }
   };
 

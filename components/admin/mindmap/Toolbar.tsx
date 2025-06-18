@@ -2,7 +2,7 @@ import { Node, Edge } from "reactflow";
 import { useState } from "react";
 import { ProjectSelectorModal } from "./ProjectSelectorModal";
 import { ImportNodesModal } from "./ImportNodesModal";
-import { Plus, Link, Upload, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Link, Upload, LayoutGrid, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface ToolbarProps {
   onAddNode: () => void;
@@ -19,6 +19,7 @@ interface ToolbarProps {
   selectedNode: Node | null;
   selectedEdge: Edge | null;
   currentProjectId: string;
+  onAutoOrganize: () => void;
 }
 
 export function Toolbar({
@@ -29,10 +30,11 @@ export function Toolbar({
   selectedNode,
   selectedEdge,
   currentProjectId,
+  onAutoOrganize,
 }: ToolbarProps) {
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const nodeStyle = selectedNode?.data?.style || {};
   const defaultStyle = {
     backgroundColor: "#ffffff",
@@ -47,7 +49,7 @@ export function Toolbar({
     nodeId?: string
   ) => {
     onAddProjectNode(linkedProjectId, projectName, nodeId);
-    setIsProjectModalOpen(false);
+    setIsProjectSelectorOpen(false);
   };
 
   return (
@@ -71,12 +73,21 @@ export function Toolbar({
       </button>
 
       <button
-        onClick={() => setIsProjectModalOpen(true)}
+        onClick={() => setIsProjectSelectorOpen(true)}
         title="Add Node from a Project"
         className="flex items-center gap-2 px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
       >
         <Link size={16} />
         {!collapsed && <span>Add Node from a Project</span>}
+      </button>
+
+      <button
+        onClick={onAutoOrganize}
+        title="Auto Organize"
+        className="flex items-center gap-2 px-3 py-1 text-sm bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors"
+      >
+        <LayoutGrid size={16} />
+        {!collapsed && <span>Auto Organize</span>}
       </button>
 
       <button
@@ -88,7 +99,7 @@ export function Toolbar({
         {!collapsed && <span>Import Nodes</span>}
       </button>
 
-      {/* Node style controls only visible when expanded */}
+      {/* Node style controls */}
       {!collapsed && selectedNode && (
         <div className="mt-4 p-2 border rounded">
           <h3 className="text-sm font-medium mb-2 text-gray-900">Node Style</h3>
@@ -141,18 +152,22 @@ export function Toolbar({
         </div>
       )}
 
-      {/* Modals */}
+      {/* Project Selector Modal */}
       <ProjectSelectorModal
-        isOpen={isProjectModalOpen}
-        onClose={() => setIsProjectModalOpen(false)}
+        isOpen={isProjectSelectorOpen}
+        onClose={() => setIsProjectSelectorOpen(false)}
         onSelect={handleProjectSelect}
         currentProjectId={currentProjectId}
       />
 
+      {/* Import Modal */}
       <ImportNodesModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onImport={onImportJSON}
+        onImport={(data) => {
+          onImportJSON(data);
+          setIsImportModalOpen(false);
+        }}
       />
     </div>
   );
