@@ -8,8 +8,15 @@ export function cn(...inputs: ClassValue[]) {
 // Debounce utilitário
 export function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
   let timeout: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
+  
+  const debouncedFn = (...args: Parameters<T>) => {
     clearTimeout(timeout);
     timeout = setTimeout(() => fn(...args), delay);
   };
+  
+  debouncedFn.cancel = () => {
+    clearTimeout(timeout);
+  };
+  
+  return debouncedFn;
 }

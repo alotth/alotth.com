@@ -147,7 +147,14 @@ export async function updateMindmapNodes({
         onConflict: 'node_id,project_id'
       });
 
-    if (nodeProjectError) throw nodeProjectError;
+    if (nodeProjectError) {
+      // Se a posição falhar por violação de FK (por exemplo, node foi deletado entre requisições), apenas loga e continua.
+      if ((nodeProjectError as any).code === '23503') {
+        console.warn(`[updateMindmapNodes] FK violation ao salvar relação node-projeto para node ${node.id}. Provavelmente foi deletado. Pulando.`);
+      } else {
+        throw nodeProjectError;
+      }
+    }
 
     // If this is a shared node with another project, create the relationship there too
     if (linkedProjectId) {
@@ -202,44 +209,119 @@ export async function deleteMindmapNode(nodeId: string, projectId: string): Prom
     throw new Error("Not authenticated");
   }
 
+  console.log(`[DELETE] Iniciando deleção do node ${nodeId} no projeto ${projectId}`);
+
   try {
-    // First delete all edges connected to this node
-    const { error: edgesError } = await supabase
+    // 1. Delete all edges connected to this node in this project
+    console.log(`[DELETE] Deletando edges conectadas ao node ${nodeId} no projeto ${projectId}`);
+    const { data: deletedEdges, error: edgesError } = await supabase
       .from("mindmap_edges")
       .delete()
       .eq("project_id", projectId)
-      .or(`source_id.eq.${nodeId},target_id.eq.${nodeId}`);
+      .or(`source_id.eq.${nodeId},target_id.eq.${nodeId}`)
+      .select();
 
-    if (edgesError) throw edgesError;
+    if (edgesError) {
+      console.error(`[DELETE] Erro ao deletar edges:`, edgesError);
+      throw edgesError;
+    }
+    console.log(`[DELETE] Deletadas ${deletedEdges?.length || 0} edges`);
 
-    // Then delete the node-project relationships
-    const { error: nodeProjectsError } = await supabase
+    // Small delay to ensure edge deletion is committed
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // 2. Delete the node-project relationship for this specific project
+    console.log(`[DELETE] Deletando relacionamento node-projeto: ${nodeId} <-> ${projectId}`);
+    const { data: deletedRelation, error: nodeProjectsError } = await supabase
       .from("mindmap_node_projects")
       .delete()
       .eq("node_id", nodeId)
-      .eq("project_id", projectId);
+      .eq("project_id", projectId)
+      .select();
 
-    if (nodeProjectsError) throw nodeProjectsError;
+    if (nodeProjectsError) {
+      console.error(`[DELETE] Erro ao deletar relacionamento node-projeto:`, nodeProjectsError);
+      throw nodeProjectsError;
+    }
+    console.log(`[DELETE] Deletado relacionamento:`, deletedRelation);
 
-    // Get the node projects
-    const { data: nodeProjects, error: nodeProjectsError2 } = await supabase
+    // Verify the relationship was actually deleted
+    const { data: verifyDeletion, error: verifyError } = await supabase
       .from("mindmap_node_projects")
       .select("*")
+      .eq("node_id", nodeId)
+      .eq("project_id", projectId);
+
+    if (verifyError) {
+      console.error(`[DELETE] Erro ao verificar deleção do relacionamento:`, verifyError);
+      throw verifyError;
+    }
+
+    if (verifyDeletion && verifyDeletion.length > 0) {
+      console.error(`[DELETE] ❌ ERRO: Relacionamento não foi deletado! Ainda existe:`, verifyDeletion);
+      throw new Error("Failed to delete node-project relationship");
+    }
+    console.log(`[DELETE] ✅ Relacionamento confirmado como deletado`);
+
+    // Small delay before checking other projects
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // 3. Check if this node exists in other projects
+    console.log(`[DELETE] Verificando se o node ${nodeId} existe em outros projetos`);
+    const { data: remainingProjects, error: checkError } = await supabase
+      .from("mindmap_node_projects")
+      .select("project_id")
       .eq("node_id", nodeId);
 
-    if (nodeProjectsError2) throw nodeProjectsError2;
+    if (checkError) {
+      console.error(`[DELETE] Erro ao verificar projetos restantes:`, checkError);
+      throw checkError;
+    }
+    
+    console.log(`[DELETE] Node ${nodeId} existe em ${remainingProjects?.length || 0} outros projetos:`, remainingProjects);
 
-    if (nodeProjects?.length === 0) {
-      // Finally delete the node itself
-      const { error: nodeError } = await supabase
+    // 4. If no other projects use this node, delete the node itself
+    if (!remainingProjects || remainingProjects.length === 0) {
+      console.log(`[DELETE] Node ${nodeId} não é usado em outros projetos. Deletando node principal.`);
+      
+      // Small delay before final deletion
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const { data: deletedNode, error: nodeError } = await supabase
         .from("mindmap_nodes")
         .delete()
+        .eq("id", nodeId)
+        .select();
+
+      if (nodeError) {
+        console.error(`[DELETE] Erro ao deletar node principal:`, nodeError);
+        throw nodeError;
+      }
+      console.log(`[DELETE] Node principal deletado:`, deletedNode);
+
+      // Final verification - ensure node is really gone
+      const { data: verifyNodeDeletion, error: verifyNodeError } = await supabase
+        .from("mindmap_nodes")
+        .select("id")
         .eq("id", nodeId);
 
-      if (nodeError) throw nodeError;
+      if (verifyNodeError) {
+        console.error(`[DELETE] Erro ao verificar deleção do node principal:`, verifyNodeError);
+        throw verifyNodeError;
+      }
+
+      if (verifyNodeDeletion && verifyNodeDeletion.length > 0) {
+        console.error(`[DELETE] ❌ ERRO: Node principal não foi deletado! Ainda existe:`, verifyNodeDeletion);
+        throw new Error("Failed to delete main node");
+      }
+      console.log(`[DELETE] ✅ Node principal confirmado como deletado`);
+    } else {
+      console.log(`[DELETE] Node ${nodeId} mantido pois é usado em outros projetos`);
     }
+
+    console.log(`[DELETE] ✅ Deleção do node ${nodeId} concluída com sucesso`);
   } catch (error) {
-    console.error('Error in deleteMindmapNode:', error);
+    console.error(`[DELETE] ❌ Erro na deleção do node ${nodeId}:`, error);
     throw error;
   }
 }

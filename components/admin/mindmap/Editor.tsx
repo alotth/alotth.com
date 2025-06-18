@@ -3,24 +3,18 @@ import ReactFlow, {
   Node,
   Edge,
   Connection,
-  addEdge,
-  useNodesState,
-  useEdgesState,
   Background,
   Controls,
   NodeChange,
   EdgeChange,
-  applyNodeChanges,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { v4 as uuidv4 } from "uuid";
-import { debounce } from "@/lib/utils";
 
 import { MindmapNode } from "./Node";
 import { MindmapEdge } from "./Edge";
 import { Toolbar } from "./Toolbar";
-import { useMindmap } from "@/hooks/useMindmap";
 
+// Define nodeTypes and edgeTypes outside component to prevent ReactFlow warnings
 const nodeTypes = {
   mindmap: MindmapNode,
 };
@@ -30,50 +24,47 @@ const edgeTypes = {
 };
 
 interface EditorProps {
-  // initialNodes?: Node[];
-  initialEdges?: Edge[];
   projectId: string;
-  // onNodesChangeProp?: (changes: NodeChange[]) => void;
-  onEdgesChangeProp?: (changes: EdgeChange[]) => void;
-  onConnectProp?: (connection: Connection) => void;
   handleAddNode: () => void;
-  handleAddProjectNode: (linkedProjectId: string, projectName: string, nodeId?: string) => void;
+  handleAddProjectNode: (
+    linkedProjectId: string,
+    projectName: string,
+    nodeId?: string
+  ) => void;
+  // Mindmap state and callbacks coming from parent
+  nodes: Node[];
+  edges: Edge[];
+  updateNode: (
+    nodeId: string,
+    updates: {
+      content?: string;
+      position?: { x: number; y: number };
+      style?: any;
+    }
+  ) => void | Promise<void>;
+  onNodesChange: (changes: NodeChange[]) => void;
+  onEdgesChange: (changes: EdgeChange[]) => void;
+  onConnect: (connection: Connection) => void;
 }
 
 export function EditorMindmap({
-  // initialNodes = [],
-  initialEdges = [],
   projectId,
-  // onNodesChangeProp,
-  onEdgesChangeProp,
-  onConnectProp,
   handleAddNode,
   handleAddProjectNode,
+  nodes,
+  edges,
+  updateNode,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
 }: EditorProps) {
-  // const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const { onNodesChange: saveNodesChange, nodes, updateNode } = useMindmap(projectId)
+  const [pendingPositionSaves, setPendingPositionSaves] = useState<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  // Debug: log changes in nodes array
   useEffect(() => {
-    console.log("nodes in EditorMindmap", nodes);
+    console.log(`[EDITOR] Nodes array updated:`, nodes.length, nodes.map(n => ({ id: n.id, content: n.data.content })));
   }, [nodes]);
-  // Handle connections
-  const onConnect = useCallback(
-    (params: Connection) => {
-      const newEdge = {
-        ...params,
-        id: uuidv4(),
-        type: "mindmap",
-      } as Edge;
-      
-      setEdges((eds) => addEdge(newEdge, eds));
-      if (onConnectProp) {
-        onConnectProp(params);
-      }
-    },
-    [setEdges, onConnectProp]
-  );
 
   // Handle node selection
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
@@ -85,76 +76,67 @@ export function EditorMindmap({
     setSelectedNode(null);
   }, []);
 
-  // Debounced save for node position
-  const debouncedSavePosition = useCallback(
-    debounce((nodeId: string, position: { x: number; y: number }) => {
+  // Save node position with debounce per node
+  const saveNodePosition = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    // Cancel any existing timeout for this node
+    const existingTimeout = pendingPositionSaves.get(nodeId);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    // Set new timeout for this node
+    const timeout = setTimeout(() => {
+      console.log(`[EDITOR] Salvando posição do node ${nodeId}:`, position);
       updateNode(nodeId, { position });
-    }, 500),
-    [updateNode]
-  );
+      setPendingPositionSaves(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(nodeId);
+        return newMap;
+      });
+    }, 500);
+
+    setPendingPositionSaves(prev => {
+      const newMap = new Map(prev);
+      newMap.set(nodeId, timeout);
+      return newMap;
+    });
+  }, [updateNode]);
 
   // Handle node drag stop (save position)
   const handleNodeDragStop = useCallback((event: any, node: Node) => {
-    debouncedSavePosition(node.id, node.position);
-  }, [debouncedSavePosition]);
+    saveNodePosition(node.id, node.position);
+  }, [saveNodePosition]);
 
-  // Handle node changes
-  const handleNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      // Se for drag, só atualiza localmente
-      if (changes.length > 0 && changes[0].type === "position" && changes[0]?.dragging === true) {
-        saveNodesChange({ changes, skipSave: true });
-        return;
+  // Handle node changes - cancel debounce for deleted nodes
+  const handleNodesChange = useCallback((changes: NodeChange[]) => {
+    // Check for deleted nodes and cancel their pending debounced saves
+    const deletedNodes = changes.filter(change => change.type === 'remove');
+    deletedNodes.forEach(change => {
+      console.log(`[EDITOR] Cancelando save pendente para node deletado: ${change.id}`);
+      const timeout = pendingPositionSaves.get(change.id);
+      if (timeout) {
+        clearTimeout(timeout);
+        setPendingPositionSaves(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(change.id);
+          return newMap;
+        });
+        console.log(`[EDITOR] ✅ Save cancelado para node: ${change.id}`);
       }
-      // Se for add/remove ou outros, salva normalmente
-      saveNodesChange({changes});
-    },
-    [saveNodesChange]
-  );
+    });
 
-  // Handle edge changes
-  const handleEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      // Update local state first
-      onEdgesChange(changes);
-
-      // Only propagate changes if they are significant (not just selection)
-      const isSignificantChange = changes.some(change => 
-        change.type === 'add' || 
-        change.type === 'remove' ||
-        change.type === 'reset'
-      );
-
-      if (isSignificantChange && onEdgesChangeProp) {
-        onEdgesChangeProp(changes);
-      }
-    },
-    [onEdgesChange, onEdgesChangeProp]
-  );
+    // Pass to hook
+    onNodesChange(changes);
+  }, [onNodesChange, pendingPositionSaves]);
 
   // Handle style changes
   const handleStyleChange = useCallback((newStyle: any) => {
     if (!selectedNode) return;
 
-    const updatedNodes = nodes.map((node) => {
-      if (node.id === selectedNode.id) {
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            style: {
-              ...node.data.style,
-              ...newStyle,
-            },
-          },
-        };
-      }
-      return node;
-    });
+    // Update node style
+    updateNode(selectedNode.id, { style: newStyle });
 
-    // setNodes(updatedNodes);
-    
-    // Update the selected node reference with new style
+    // Update selected node reference
     setSelectedNode(prevNode => {
       if (!prevNode) return null;
       return {
@@ -168,15 +150,7 @@ export function EditorMindmap({
         },
       };
     });
-    
-    // Trigger node change event to save to database
-    saveNodesChange({ changes: [{
-      type: 'select',
-      id: selectedNode.id,
-      selected: true,
-    }]});
-    
-  }, [selectedNode, nodes, saveNodesChange]);
+  }, [selectedNode, updateNode]);
 
   return (
     <div className="h-full relative">
@@ -194,7 +168,7 @@ export function EditorMindmap({
         nodes={nodes}
         edges={edges}
         onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
+        onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}

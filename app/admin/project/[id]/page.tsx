@@ -5,8 +5,7 @@ import { Toolbar } from "@/components/admin/mindmap/Toolbar";
 import { useMindmap } from "@/hooks/useMindmap";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { useCallback, useState } from "react";
-import { Node } from "reactflow";
+import { useCallback, useState, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -33,21 +32,41 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     edges,
     loading,
     error,
-    onNodesChange: saveNodesChange,
+    addNode,
+    removeNode,
+    updateNode,
     onEdgesChange,
     onConnect,
     getMindmapTitle,
-    updateNode,
+    onNodesChange,
   } = useMindmap(id);
 
-  const title = getMindmapTitle();
+  // Local state for project title
+  const [projectTitle, setProjectTitle] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const title = await getMindmapTitle();
+        if (isMounted) setProjectTitle(title ?? "");
+      } catch (err) {
+        console.error("Erro ao obter título do projeto:", err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [getMindmapTitle]);
 
   // Add new node
   const handleAddNode = useCallback(async () => {
+    const timestamp = Date.now();
+    console.log(`[PAGE-${timestamp}] handleAddNode chamado`);
     try {
-      const newNode: Node = {
+      await addNode({
         id: uuidv4(),
-        type: "mindmap",
         position: { x: 100, y: 100 },
         data: {
           content: "New Node",
@@ -58,29 +77,19 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             fontSize: 14,
           },
         },
-      } as Node;
-
-      console.log("Chamando saveNodesChange para adicionar node", newNode);
-      await saveNodesChange({
-        changes: [
-          {
-            type: "add",
-            item: newNode,
-          },
-        ],
       });
+      console.log(`[PAGE-${timestamp}] ✅ addNode concluído`);
     } catch (error) {
-      console.error("Error adding node:", error);
+      console.error(`[PAGE-${timestamp}] ❌ Erro em handleAddNode:`, error);
     }
-  }, [saveNodesChange]);
+  }, [addNode]);
 
   // Add new project node
   const handleAddProjectNode = useCallback(
     async (linkedProjectId: string, projectName: string, nodeId?: string) => {
       try {
-        const newNode: Node = {
+        await addNode({
           id: nodeId || uuidv4(),
-          type: "mindmap",
           position: { x: 100, y: 100 },
           data: {
             content: projectName,
@@ -91,22 +100,12 @@ export default function MindmapPage({ params }: MindmapPageProps) {
               fontSize: 14,
             },
           },
-        } as Node;
-
-        await saveNodesChange({
-          changes: [
-            {
-              type: "add",
-              item: newNode,
-            },
-          ],
-          linkedProjectId: linkedProjectId,
-        });
+        }, linkedProjectId);
       } catch (error) {
         console.error("Error adding project node:", error);
       }
     },
-    [saveNodesChange]
+    [addNode]
   );
 
   const handleNoteContentChange = (nodeId: string, newContent: string) => {
@@ -133,7 +132,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     <div className="h-full">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold">Project {title}</h1>
+          <h1 className="text-2xl font-bold">Project {projectTitle ?? ""}</h1>
           <Select
             value={viewType}
             onValueChange={(value: string) => setViewType(value as ViewType)}
@@ -154,12 +153,15 @@ export default function MindmapPage({ params }: MindmapPageProps) {
 
       {viewType === "mindmap" ? (
         <EditorMindmap
-          initialEdges={edges}
           projectId={id}
-          onEdgesChangeProp={onEdgesChange}
-          onConnectProp={onConnect}
           handleAddNode={handleAddNode}
           handleAddProjectNode={handleAddProjectNode}
+          nodes={nodes}
+          edges={edges}
+          updateNode={updateNode}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
         />
       ) : (
         <>
