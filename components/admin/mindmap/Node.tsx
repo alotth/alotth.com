@@ -4,6 +4,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { getNodeProjects } from "@/lib/mindmap";
+import { usePathname } from "next/navigation";
 
 interface MindmapNodeData {
   content: string;
@@ -31,6 +32,9 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   const [projects, setProjects] = useState<{ project_id: string; project_title: string }[]>([]);
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pathname = usePathname();
+  // Extrai o id do projeto da URL: /admin/project/[id]
+  const currentProjectId = pathname?.split("/admin/project/")[1]?.split("/")[0] || "";
 
   useEffect(() => {
     if (contentRef.current) {
@@ -194,17 +198,19 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
       )}
       {projects.length > 1 && (
         <div className="mt-2 text-xs text-gray-500">
-          <div>Shared in {projects.length} project{projects.length > 1 ? 's' : ''}:</div>
+          <div>Shared with:</div>
           <div className="flex flex-wrap gap-1 mt-1">
-            {projects.map(project => (
-              <Link
-                key={project.project_id}
-                href={`/admin/project/${project.project_id}`}
-                className="px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
-              >
-                {project.project_title}
-              </Link>
-            ))}
+            {projects
+              .filter(project => project.project_id !== currentProjectId)
+              .map(project => (
+                <Link
+                  key={project.project_id}
+                  href={`/admin/project/${project.project_id}`}
+                  className="text-blue-600 underline hover:text-blue-800 transition-colors px-0 py-0 rounded-none bg-transparent"
+                >
+                  {project.project_title}
+                </Link>
+              ))}
           </div>
         </div>
       )}
