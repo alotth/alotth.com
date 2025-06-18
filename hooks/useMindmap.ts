@@ -441,22 +441,21 @@ export function useMindmap(projectId: string) {
       
       console.log(`[HOOK] Criando nova edge:`, newEdge);
       
-      // Update local state
-      setEdges((currentEdges) => {
-        const updatedEdges = addEdge(newEdge, currentEdges);
+      // Update local state and save to database
+      try {
+        // Save to database first
+        await updateMindmapEdges(projectId, [newEdge]);
+        console.log(`[HOOK] ✅ Edge salva no banco com sucesso`);
         
-        // Save to database
-        updateMindmapEdges(projectId, updatedEdges).then(() => {
-          console.log(`[HOOK] ✅ Edge salva no banco com sucesso`);
-        }).catch((err) => {
-          console.error('Error creating connection:', err);
-          setError(err instanceof Error ? err : new Error("Failed to create connection"));
-        });
-        
-        return updatedEdges;
-      });
+        // Then update local state
+        setEdges((currentEdges) => addEdge(newEdge, currentEdges));
+      } catch (err) {
+        console.error('Error creating connection:', err);
+        setError(err instanceof Error ? err : new Error("Failed to create connection"));
+        // Don't update local state if database save failed
+      }
     } catch (err) {
-      console.error('Error creating connection:', err);
+      console.error('Error in onConnect:', err);
       setError(err instanceof Error ? err : new Error("Failed to create connection"));
     }
   }, [projectId, supabase]);

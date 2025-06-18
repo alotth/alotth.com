@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { getNodeProjects } from "@/lib/mindmap";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 
 interface NoteCardProps {
   id: string;
@@ -15,7 +16,6 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
   const [text, setText] = useState(content);
   const [isExpanded, setIsExpanded] = useState(false);
   const [projects, setProjects] = useState<{ project_id: string; project_title: string }[]>([]);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     async function loadProjects() {
@@ -31,12 +31,19 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
   }, [id]);
 
   const handleOnClick = () => {
-    setIsEditing(true);
+    if (!isEditing) {
+      setIsEditing(true);
+    }
   };
 
-  const handleBlur = () => {
+  const handleSave = () => {
     setIsEditing(false);
     onContentChange(id, text);
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setText(content); // Reset to original content
   };
 
   return (
@@ -46,17 +53,31 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
         isExpanded ? "w-full" : "w-full",
         !isExpanded && !isEditing && "max-h-[300px] overflow-hidden"
       )}
-      onClick={handleOnClick}
+      onClick={!isEditing ? handleOnClick : undefined}
     >
       {isEditing ? (
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={handleBlur}
-          className="w-full min-h-[200px] font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900"
-          autoFocus
-        />
+        <div className="space-y-3">
+          <MarkdownEditor
+            value={text}
+            onChange={setText}
+            rows={8}
+            preview={false}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+            >
+              Save
+            </button>
+            <button
+              onClick={handleCancel}
+              className="px-3 py-1 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="prose prose-sm max-w-none text-gray-900">
           <ReactMarkdown
@@ -95,6 +116,15 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
                   {children}
                 </blockquote>
               ),
+              img: ({ src, alt, ...props }) => (
+                <img 
+                  src={src} 
+                  alt={alt} 
+                  className="max-w-full h-auto rounded-md my-2 shadow-sm" 
+                  loading="lazy"
+                  {...props} 
+                />
+              ),
             }}
           >
             {text}
@@ -117,12 +147,17 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
           </div>
         </div>
       )}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="mt-2 text-xs text-gray-500 hover:text-gray-700"
-      >
-        {isExpanded ? "Collapse" : "Expand"}
-      </button>
+      {!isEditing && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsExpanded(!isExpanded);
+          }}
+          className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+        >
+          {isExpanded ? "Collapse" : "Expand"}
+        </button>
+      )}
     </div>
   );
 };

@@ -13,6 +13,7 @@ import "reactflow/dist/style.css";
 import { MindmapNode } from "./Node";
 import { MindmapEdge } from "./Edge";
 import { Toolbar } from "./Toolbar";
+import { MindmapNodeData } from "../../../types/mindmap";
 
 // Define nodeTypes and edgeTypes outside component to prevent ReactFlow warnings
 const nodeTypes = {
@@ -45,6 +46,10 @@ interface EditorProps {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  onImportNodes?: (data: {
+    nodes: { content: string; position: { x: number; y: number }; style?: any }[];
+    edges: { source: string; target: string }[];
+  }) => void;
 }
 
 export function EditorMindmap({
@@ -57,6 +62,7 @@ export function EditorMindmap({
   onNodesChange,
   onEdgesChange,
   onConnect,
+  onImportNodes,
 }: EditorProps) {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [pendingPositionSaves, setPendingPositionSaves] = useState<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -159,6 +165,7 @@ export function EditorMindmap({
           onAddNode={handleAddNode}
           onAddProjectNode={handleAddProjectNode}
           onStyleChange={handleStyleChange}
+          onImportJSON={onImportNodes || (() => {})}
           selectedNode={selectedNode}
           selectedEdge={null}
           currentProjectId={projectId}

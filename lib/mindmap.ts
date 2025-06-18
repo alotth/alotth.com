@@ -186,19 +186,48 @@ export async function updateMindmapEdges(
     throw new Error("Not authenticated");
   }
 
-  const { error } = await supabase.from("mindmap_edges").upsert(
-    edges.map((edge) => ({
-      id: edge.id,
-      source_id: edge.source,
-      target_id: edge.target,
-      type: edge.type || 'mindmap',
-      label: edge.label || '',
-      style: edge.style || {},
-      project_id: projectId,
-    }))
-  );
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 second
 
-  if (error) throw error;
+  for (const edge of edges) {
+    let retries = 0;
+    let success = false;
+
+    while (!success && retries < maxRetries) {
+      try {
+        const { error } = await supabase.from("mindmap_edges").upsert({
+          id: edge.id,
+          source_id: edge.source,
+          target_id: edge.target,
+          type: edge.type || 'mindmap',
+          label: edge.label || '',
+          style: edge.style || {},
+          project_id: projectId,
+        });
+
+        if (error) {
+          if (error.code === '23503' && retries < maxRetries - 1) {
+            // Foreign key violation - wait and retry
+            console.log(`[EDGE] Retry ${retries + 1}/${maxRetries} for edge ${edge.id} (${edge.source} -> ${edge.target})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelay));
+            retries++;
+            continue;
+          }
+          throw error;
+        }
+
+        success = true;
+        console.log(`[EDGE] Successfully created edge ${edge.id} (${edge.source} -> ${edge.target})`);
+      } catch (error) {
+        if (retries === maxRetries - 1) {
+          console.error(`[EDGE] Failed to create edge after ${maxRetries} retries:`, error);
+          throw error;
+        }
+        retries++;
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      }
+    }
+  }
 }
 
 export async function deleteMindmapNode(nodeId: string, projectId: string): Promise<void> {
@@ -570,4 +599,200 @@ export async function getMindmapProjects(): Promise<MindmapProject[]> {
 
   if (error) throw error;
   return data;
+}
+
+// ===================== PROJECT OVERVIEW (USER-LEVEL) =====================
+
+export interface ProjectOverviewNode {
+  project_id: string;
+  position: { x: number; y: number };
+  style?: any;
+}
+
+export interface ProjectOverviewEdge {
+  id: string;
+  source_project_id: string;
+  target_project_id: string;
+  label?: string;
+  style?: any;
+}
+
+export async function getProjectOverview(): Promise<{
+  nodes: ProjectOverviewNode[];
+  edges: ProjectOverviewEdge[];
+}> {
+  const supabase = createClientComponentClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+
+  // Fetch nodes
+  const { data: nodesData, error: nodesError } = await supabase
+    .from("project_view_nodes")
+    .select("project_id, position_x, position_y, style");
+  if (nodesError) throw nodesError;
+
+  // Fetch edges
+  const { data: edgesData, error: edgesError } = await supabase
+    .from("project_view_edges")
+    .select();
+  if (edgesError) throw edgesError;
+
+  const nodes: ProjectOverviewNode[] = (nodesData || []).map((n: any) => ({
+    project_id: n.project_id,
+    position: { x: n.position_x, y: n.position_y },
+    style: n.style || {},
+  }));
+
+  const edges: ProjectOverviewEdge[] = (edgesData || []) as any;
+
+  return { nodes, edges };
+}
+
+export async function upsertProjectOverviewNodes(nodes: ProjectOverviewNode[]): Promise<void> {
+  const supabase = createClientComponentClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+
+  const rows = nodes.map((n) => ({
+    user_id: session.user.id,
+    project_id: n.project_id,
+    position_x: n.position.x,
+    position_y: n.position.y,
+    style: n.style || {},
+  }));
+
+  const { error } = await supabase.from("project_view_nodes").upsert(rows, {
+    onConflict: "user_id,project_id",
+  });
+  if (error) throw error;
+}
+
+export async function upsertProjectOverviewEdges(edges: ProjectOverviewEdge[]): Promise<void> {
+  const supabase = createClientComponentClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error("Not authenticated");
+
+  const rows = edges.map((e) => ({
+    id: e.id,
+    user_id: session.user.id,
+    source_project_id: e.source_project_id,
+    target_project_id: e.target_project_id,
+    label: e.label,
+    style: e.style || {},
+  }));
+
+  const { error } = await supabase.from("project_view_edges").upsert(rows, {
+    onConflict: "id",
+  });
+  if (error) throw error;
+}
+
+export async function deleteProjectOverviewEdge(edgeId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { error } = await supabase
+    .from("project_view_edges")
+    .delete()
+    .eq("id", edgeId);
+
+  if (error) throw error;
+}
+
+// ===================== IMPORTER UTILS =====================
+
+/**
+ * Import an array of projects (with their nodes and edges) in one go.
+ * The JSON shape expected:
+ * [
+ *   {
+ *     "title": string,
+ *     "description"?: string,
+ *     "nodes": [
+ *       {
+ *         "content": string,
+ *         "position": { "x": number, "y": number },
+ *         "style"?: any
+ *       }
+ *     ],
+ *     "edges": [
+ *       {
+ *         "source": number,   // index of source node in nodes array
+ *         "target": number    // index of target node in nodes array
+ *       }
+ *     ]
+ *   }
+ * ]
+ */
+
+export interface RawImportProject {
+  title: string;
+  description?: string;
+  nodes: {
+    content: string;
+    position: { x: number; y: number };
+    style?: any;
+  }[];
+  edges: {
+    source: number | string;
+    target: number | string;
+  }[];
+}
+
+export async function importMindmapProjects(rawProjects: RawImportProject[]) {
+  for (const raw of rawProjects) {
+    // 1. Create project first
+    const project = await createMindmapProject(raw.title, raw.description);
+
+    // 2. Convert raw nodes -> RF Nodes with new ids
+    const idxToId = new Map<number, string>();
+    const rfNodes: Node[] = raw.nodes.map((n, idx) => {
+      const newId = crypto.randomUUID();
+      idxToId.set(idx, newId);
+      return {
+        id: newId,
+        position: n.position,
+        data: {
+          content: n.content,
+          style: n.style || {
+            backgroundColor: "#ffffff",
+            borderColor: "#000000",
+            borderWidth: 2,
+            fontSize: 14,
+          },
+        },
+      } as unknown as Node;
+    });
+
+    // 3. Insert nodes
+    await updateMindmapNodes({ projectId: project.id, nodes: rfNodes });
+
+    // 4. Map raw edges using idx mapping
+    const rfEdges: Edge[] = raw.edges.map((e) => {
+      const sourceId = idxToId.get(typeof e.source === "string" ? parseInt(e.source) : (e.source as number));
+      const targetId = idxToId.get(typeof e.target === "string" ? parseInt(e.target) : (e.target as number));
+      if (!sourceId || !targetId) {
+        throw new Error(`Edge references missing node. Source: ${e.source}, Target: ${e.target}`);
+      }
+      return {
+        id: crypto.randomUUID(),
+        source: sourceId,
+        target: targetId,
+        type: "default",
+      } as unknown as Edge;
+    });
+
+    // 5. Insert edges
+    await updateMindmapEdges(project.id, rfEdges);
+  }
 }

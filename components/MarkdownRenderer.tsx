@@ -48,6 +48,15 @@ export default function MarkdownRenderer({
           table: ({ children }) => (
             <table className={styles.table}>{children}</table>
           ),
+          img: ({ src, alt, ...props }) => (
+            <img 
+              src={src} 
+              alt={alt} 
+              className="max-w-full h-auto rounded-md my-2 shadow-sm" 
+              loading="lazy"
+              {...props} 
+            />
+          ),
         }}
       >
         {content}

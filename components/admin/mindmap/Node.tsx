@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { getNodeProjects } from "@/lib/mindmap";
 import { usePathname } from "next/navigation";
+import { ChevronRight, ChevronLeft } from "lucide-react";
 
 interface MindmapNodeData {
   content: string;
@@ -139,6 +140,21 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         </div>
       ) : (
         <div className="relative">
+          {/* Botão de expand/collapse no topo direito */}
+          {!isEditing && shouldShowExpand && (
+            <button
+              onClick={toggleExpand}
+              className="absolute top-1 right-1 p-1 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full z-10"
+              title={isExpanded ? "Recolher" : "Expandir"}
+              style={{ lineHeight: 0 }}
+            >
+              {isExpanded ? (
+                <ChevronLeft size={18} />
+              ) : (
+                <ChevronRight size={18} />
+              )}
+            </button>
+          )}
           <div
             ref={contentRef}
             className="prose prose-sm max-w-none text-gray-900"
@@ -186,14 +202,6 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
               {!isExpanded ? truncateText(text, 20) : text}
             </ReactMarkdown>
           </div>
-          {!isEditing && shouldShowExpand && (
-            <button
-              onClick={toggleExpand}
-              className="absolute bottom-0 right-0 px-2 py-1 bg-gray-100 text-xs text-gray-600 hover:bg-gray-200 rounded-tl transition-colors"
-            >
-              {isExpanded ? "Collapse" : "Expand"}
-            </button>
-          )}
         </div>
       )}
       {projects.length > 1 && (
