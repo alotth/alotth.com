@@ -30,7 +30,7 @@ export default function AdminDashboard() {
           </p>
           <div className="flex items-center space-x-4">
             <Link
-              href="/admin/mindmap"
+              href="/admin/project"
               className="text-primary hover:underline"
             >
               Gerenciar Mindmap →

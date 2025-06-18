@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactFlow, {
   Node,
   Edge,
@@ -14,6 +14,7 @@ import ReactFlow, {
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { v4 as uuidv4 } from "uuid";
+import { debounce } from "@/lib/utils";
 
 import { MindmapNode } from "./Node";
 import { MindmapEdge } from "./Edge";
@@ -35,22 +36,28 @@ interface EditorProps {
   // onNodesChangeProp?: (changes: NodeChange[]) => void;
   onEdgesChangeProp?: (changes: EdgeChange[]) => void;
   onConnectProp?: (connection: Connection) => void;
+  handleAddNode: () => void;
+  handleAddProjectNode: (linkedProjectId: string, projectName: string, nodeId?: string) => void;
 }
 
-export function Editor({
+export function EditorMindmap({
   // initialNodes = [],
   initialEdges = [],
   projectId,
   // onNodesChangeProp,
   onEdgesChangeProp,
   onConnectProp,
+  handleAddNode,
+  handleAddProjectNode,
 }: EditorProps) {
   // const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const { onNodesChange: saveNodesChange, nodes } = useMindmap(projectId)
-  const [isDragging, setIsDragging] = useState(false);
+  const { onNodesChange: saveNodesChange, nodes, updateNode } = useMindmap(projectId)
 
+  useEffect(() => {
+    console.log("nodes in EditorMindmap", nodes);
+  }, [nodes]);
   // Handle connections
   const onConnect = useCallback(
     (params: Connection) => {
@@ -68,65 +75,6 @@ export function Editor({
     [setEdges, onConnectProp]
   );
 
-  // Add new node
-  const handleAddNode = useCallback(() => {
-    const newNode: Node = {
-      id: uuidv4(),
-      type: "mindmap",
-      position: { x: 100, y: 100 },
-      data: {
-        content: "New Node",
-        style: {
-          backgroundColor: "#ffffff",
-          borderColor: "#000000",
-          borderWidth: 2,
-          fontSize: 14,
-        },
-      },
-    };
-
-    // setNodes((nds) => [...nds, newNode]);
-    saveNodesChange({ changes: [{
-      type: 'add',
-      item: newNode,
-    }]});
-    
-  }, [saveNodesChange]);
-
-  // Add new project node
-  const handleAddProjectNode = useCallback(async (linkedProjectId: string, projectName: string, nodeId?: string) => {
-    try {
-      const newNode: Node = {
-        id: nodeId || uuidv4(),
-        type: "mindmap",
-        position: { x: 100, y: 100 },
-        data: {
-          content: projectName,
-          style: {
-            backgroundColor: "#ffffff",
-            borderColor: "#000000",
-            borderWidth: 2,
-            fontSize: 14,
-          },
-        },
-      };
-
-      // Add the node to the current project
-      // setNodes((nds) => [...nds, newNode]);
-      
-      saveNodesChange({ 
-        changes: [{
-          type: 'add',
-          item: newNode,
-        }], 
-        linkedProjectId: linkedProjectId
-      });
-      
-    } catch (error) {
-      console.error('Error adding project node:', error);
-    }
-  }, [saveNodesChange]);
-
   // Handle node selection
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
@@ -137,46 +85,47 @@ export function Editor({
     setSelectedNode(null);
   }, []);
 
+  // Debounced save for node position
+  const debouncedSavePosition = useCallback(
+    debounce((nodeId: string, position: { x: number; y: number }) => {
+      updateNode(nodeId, { position });
+    }, 500),
+    [updateNode]
+  );
+
+  // Handle node drag stop (save position)
+  const handleNodeDragStop = useCallback((event: any, node: Node) => {
+    debouncedSavePosition(node.id, node.position);
+  }, [debouncedSavePosition]);
+
   // Handle node changes
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      // If we're dragging, only update local state
+      // Se for drag, só atualiza localmente
       if (changes.length > 0 && changes[0].type === "position" && changes[0]?.dragging === true) {
-        console.log("dragging", changes);
-        // applyNodeChanges(changes, nodes);
-
-        // // Update nodes through saveNodesChange but don't save to database
         saveNodesChange({ changes, skipSave: true });
         return;
       }
-
-      // For non-drag changes, save to database
+      // Se for add/remove ou outros, salva normalmente
       saveNodesChange({changes});
     },
-    [saveNodesChange, nodes, isDragging]
+    [saveNodesChange]
   );
-
-  // Handle node drag stop
-  const handleNodeDragStop = useCallback(() => {
-    setIsDragging(false);
-    // Save final positions to database
-    // saveNodesChange({changes: [{
-    //   type: 'position',
-    //   id: selectedNode?.id || '',
-    //   position: selectedNode?.position || { x: 0, y: 0 },
-    // }]});
-  }, [saveNodesChange, selectedNode]);
-
-  // Handle node drag start
-  const handleNodeDragStart = useCallback(() => {
-    setIsDragging(true);
-  }, []);
 
   // Handle edge changes
   const handleEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
+      // Update local state first
       onEdgesChange(changes);
-      if (onEdgesChangeProp) {changes
+
+      // Only propagate changes if they are significant (not just selection)
+      const isSignificantChange = changes.some(change => 
+        change.type === 'add' || 
+        change.type === 'remove' ||
+        change.type === 'reset'
+      );
+
+      if (isSignificantChange && onEdgesChangeProp) {
         onEdgesChangeProp(changes);
       }
     },
@@ -249,8 +198,7 @@ export function Editor({
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
-        // onNodeDragStart={handleNodeDragStart}
-        // onNodeDragStop={handleNodeDragStop}
+        onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView

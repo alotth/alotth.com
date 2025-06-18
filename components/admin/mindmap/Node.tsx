@@ -16,6 +16,13 @@ interface MindmapNodeData {
   onChange?: (newText: string) => void;
 }
 
+const truncateText = (text: string, maxLength: number) => {
+  // Remove extra spaces and trim
+  const cleanText = text.replace(/\s+/g, ' ').trim();
+  if (cleanText.length <= 20) return cleanText;
+  return cleanText.slice(0, 20) + "...";
+};
+
 export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapNodeData>) => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.content);
@@ -26,12 +33,15 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (contentRef.current && !isExpanded) {
+    if (contentRef.current) {
       const contentHeight = contentRef.current.scrollHeight;
       const containerHeight = contentRef.current.clientHeight;
-      setShouldShowExpand(contentHeight > containerHeight);
+      const hasOverflow = contentHeight > containerHeight;
+      const hasMultipleLines = text.split('\n').length > 3;
+      const moreThan20Chars = text.length > 20;
+      setShouldShowExpand(hasOverflow || hasMultipleLines || moreThan20Chars);
     }
-  }, [text, isExpanded]);
+  }, [text]);
 
   useEffect(() => {
     async function loadProjects() {
@@ -75,7 +85,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
       className={cn(
         "px-4 py-2 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200",
         isExpanded ? "w-[600px]" : "w-[200px]",
-        !isExpanded && !isEditing && "max-h-[120px] overflow-hidden"
+        !isExpanded && !isEditing && "max-h-[160px] overflow-hidden"
       )}
       style={{
         backgroundColor: data.style?.backgroundColor || "#ffffff",
@@ -127,10 +137,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         <div className="relative">
           <div
             ref={contentRef}
-            className={cn(
-              "prose prose-sm max-w-none text-gray-900",
-              !isExpanded && "line-clamp-3"
-            )}
+            className="prose prose-sm max-w-none text-gray-900"
           >
             <ReactMarkdown
               components={{
@@ -143,7 +150,9 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
                 h3: ({ children }) => (
                   <h3 className="text-lg font-bold mb-2">{children}</h3>
                 ),
-                p: ({ children }) => <p className="mb-2">{children}</p>,
+                p: ({ children }) => (
+                  <p className="mb-2">{children}</p>
+                ),
                 ul: ({ children }) => (
                   <ul className="list-disc pl-4 mb-2">{children}</ul>
                 ),
@@ -170,13 +179,13 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
                 ),
               }}
             >
-              {text}
+              {!isExpanded ? truncateText(text, 20) : text}
             </ReactMarkdown>
           </div>
           {!isEditing && shouldShowExpand && (
             <button
               onClick={toggleExpand}
-              className="absolute bottom-0 right-0 text-xs text-gray-500 hover:text-gray-700"
+              className="absolute bottom-0 right-0 px-2 py-1 bg-gray-100 text-xs text-gray-600 hover:bg-gray-200 rounded-tl transition-colors"
             >
               {isExpanded ? "Collapse" : "Expand"}
             </button>
@@ -190,7 +199,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
             {projects.map(project => (
               <Link
                 key={project.project_id}
-                href={`/admin/mindmap/${project.project_id}`}
+                href={`/admin/project/${project.project_id}`}
                 className="px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
               >
                 {project.project_title}

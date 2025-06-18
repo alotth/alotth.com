@@ -69,7 +69,7 @@ export function ProjectSelectorModal({
     setLoadingNodes(true);
     try {
       const { nodes } = await getMindmapProject(projectId);
-      setNodes(nodes.map(node => ({
+      setNodes(nodes.map((node: any) => ({
         id: node.id,
         content: node.content
       })));

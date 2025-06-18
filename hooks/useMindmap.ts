@@ -74,13 +74,61 @@ export function useMindmap(projectId: string) {
     );
   }, []);
 
+  const updateNode = useCallback(async (nodeId: string, updates: { content?: string; position?: { x: number; y: number } }) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("Not authenticated");
+      }
+
+      // Update local state
+      setNodes((nds) =>
+        nds.map((node) => {
+          if (node.id === nodeId) {
+            return {
+              ...node,
+              ...(updates.position ? { position: updates.position } : {}),
+              data: {
+                ...node.data,
+                ...(updates.content !== undefined ? { content: updates.content } : {}),
+              },
+            };
+          }
+          return node;
+        })
+      );
+
+      // Save to database
+      await updateMindmapNodes({
+        projectId,
+        nodes: nodes.map(node => 
+          node.id === nodeId 
+            ? {
+                ...node,
+                ...(updates.position ? { position: updates.position } : {}),
+                data: {
+                  ...node.data,
+                  ...(updates.content !== undefined ? { content: updates.content } : {}),
+                },
+              }
+            : node
+        ),
+      });
+    } catch (err) {
+      console.error('Error updating node:', err);
+      setError(err instanceof Error ? err : new Error("Failed to update node"));
+    }
+  }, [projectId, nodes, supabase]);
+
   // Load initial data
   useEffect(() => {
+    let isMounted = true;
     async function loadMindmap() {
       try {
         setLoading(true);
         const data = await getMindmapProject(projectId, Date.now().toString());
-        setNodes(data.nodes.map(node => ({
+        if (!isMounted) return;
+        setNodes(data.nodes.map((node: any)  =>   ({
           ...convertToReactFlowNode(node),
           data: {
             ...convertToReactFlowNode(node).data,
@@ -92,23 +140,13 @@ export function useMindmap(projectId: string) {
       } catch (err) {
         console.error('Error loading data:', err);
         setError(err as Error);
-        
-        // Check if it's a connection timeout error
-        if (err instanceof Error && 
-            err.cause && 
-            typeof err.cause === 'object' && 
-            'code' in err.cause && 
-            err.cause.code === 'UND_ERR_CONNECT_TIMEOUT') {
-          // Redirect to login page
-          router.push('/login');
-        }
       } finally {
         setLoading(false);
       }
     }
-
     loadMindmap();
-  }, [projectId, router, handleTextChange]);
+    return () => { isMounted = false; };
+  }, [projectId]);
 
   // Handle node changes
   const onNodesChange = useCallback(
@@ -119,42 +157,48 @@ export function useMindmap(projectId: string) {
           throw new Error("Not authenticated");
         }
         
+        // Trata adição de node
+        const addChange = changes.find((change) => change.type === "add" && "item" in change);
+        if (addChange) {
+          const newNode = (addChange as any).item as Node;
+          setNodes((prevNodes) => {
+            const updatedNodes = [...prevNodes, newNode];
+            console.log("updatedNodes after setNodes callback", updatedNodes);
+            // Salva no banco usando o array atualizado
+            if (!skipSave) {
+              updateMindmapNodes({
+                projectId,
+                nodes: updatedNodes,
+                linkedProjectId,
+              });
+            }
+            return updatedNodes;
+          });
+          return;
+        }
+
+        // Check if this is a deletion change
+        const deletionChange = changes.find(
+          (change) => change.type === "remove"
+        );
+        if (deletionChange) {
+          console.log("Tentando deletar node do banco:", deletionChange.id, projectId);
+          await deleteMindmapNode(deletionChange.id, projectId);
+          console.log("Delete do banco chamado para:", deletionChange.id);
+          setNodes((prevNodes) => prevNodes.filter(
+            (node) => node.id !== deletionChange.id
+          ));
+          return;
+        }
 
         // For other changes, preserve the entire data object
         const updatedNodes = applyNodeChanges(changes, nodes)
-        // .map(updatedNode => {
-        //   const originalNode = nodes.find(node => node.id === updatedNode.id);
-        //   if (originalNode) {
-        //     return {
-        //       ...updatedNode,
-        //       data: {
-        //         ...originalNode.data,
-        //         ...updatedNode.data,
-        //       },
-        //     };
-        //   }
-        //   return updatedNode;
-        // });
-
+        console.log("updatedNodes", updatedNodes);
+        console.log("changes", changes);
         setNodes(updatedNodes);
         
         // Only save to database if skipSave is not true
         if (!skipSave) {
-          // Check if this is a deletion change
-          const deletionChange = changes.find(
-            (change) => change.type === "remove"
-          );
-          if (deletionChange) {
-            // First delete the node from the database
-            await deleteMindmapNode(deletionChange.id, projectId);
-            // Then update local state
-            const updatedNodes = nodes.filter(
-              (node) => node.id !== deletionChange.id
-            );
-            setNodes(updatedNodes);
-            return;
-          }
-
           await updateMindmapNodes({
             projectId,
             nodes: updatedNodes,
@@ -183,11 +227,16 @@ export function useMindmap(projectId: string) {
         // Check if this is a deletion change
         const deletionChange = changes.find(change => change.type === 'remove');
         if (deletionChange) {
-          // First delete the edge from the database
-          await deleteMindmapEdge(deletionChange.id);
-          // Then update local state
+          // First update local state
           const updatedEdges = edges.filter(edge => edge.id !== deletionChange.id);
           setEdges(updatedEdges);
+          
+          // Then delete from database in the background
+          deleteMindmapEdge(deletionChange.id).catch(err => {
+            console.error('Error deleting edge:', err);
+            // Revert local state if delete fails
+            setEdges(edges);
+          });
           return;
         }
 
@@ -195,8 +244,21 @@ export function useMindmap(projectId: string) {
         const updatedEdges = applyEdgeChanges(changes, edges);
         setEdges(updatedEdges);
         
-        // Save to database
-        await updateMindmapEdges(projectId, updatedEdges);
+        // Only save to database if it's a significant change (not just selection)
+        const isSignificantChange = changes.some(change => 
+          change.type === 'add' || 
+          change.type === 'reset' ||
+          (change.type === 'select' && change.selected === false)
+        );
+        
+        if (isSignificantChange) {
+          // Save to database in the background
+          updateMindmapEdges(projectId, updatedEdges).catch(err => {
+            console.error('Error updating edges:', err);
+            // Revert local state if update fails
+            setEdges(edges);
+          });
+        }
       } catch (err) {
         console.error('Error updating edges:', err);
         setError(
@@ -222,8 +284,15 @@ export function useMindmap(projectId: string) {
           type: "mindmap",
         } as Edge;
         
+        // Update local state first
         setEdges((eds) => addEdge(newEdge, eds));
-        await updateMindmapEdges(projectId, [...edges, newEdge]);
+        
+        // Save to database in the background without waiting
+        updateMindmapEdges(projectId, [...edges, newEdge]).catch(err => {
+          console.error('Error saving edge:', err);
+          // Revert local state if save fails
+          setEdges(eds => eds.filter(e => e.id !== newEdge.id));
+        });
       } catch (err) {
         setError(
           err instanceof Error ? err : new Error("Failed to create edge")
@@ -242,5 +311,6 @@ export function useMindmap(projectId: string) {
     onEdgesChange,
     onConnect,
     getMindmapTitle,
+    updateNode,
   };
 }

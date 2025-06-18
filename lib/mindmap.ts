@@ -463,3 +463,29 @@ export async function createProjectNode(
 
   return { node_id: newNodeId };
 }
+
+export async function deleteMindmapProject(projectId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { error } = await supabase
+    .from("mindmap_projects")
+    .delete()
+    .eq("id", projectId);
+
+  if (error) throw error;
+}
+
+export async function getMindmapProjects(): Promise<MindmapProject[]> {
+  const supabase = createClientComponentClient();
+  const { data, error } = await supabase
+    .from("mindmap_projects")
+    .select("*");
+
+  if (error) throw error;
+  return data;
+}

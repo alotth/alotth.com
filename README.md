@@ -1,123 +1,126 @@
 # Alotth.com
 
-## Arquitetura
+## Architecture
 
-### Tecnologias Principais
+### Core Technologies
 
 - Next.js (Latest)
-- Supabase (Banco de dados e autenticação)
-- Markdown para conteúdo
-- Sistema de temas para visualização
+- Supabase (Database and Authentication)
+- Markdown for content
+- Theme system for visualization
 
-### Estrutura do Projeto
+### Project Structure
 
 ```
 alotth.com/
-├── app/                    # Diretório principal do Next.js
-│   ├── page.tsx           # Página inicial (em construção)
-│   ├── admin/             # Área administrativa (protegida)
-│   │   ├── layout.tsx    # Layout com verificação de autenticação
-│   │   ├── page.tsx      # Dashboard principal
-│   │   ├── login/        # Página de login administrativo
-│   │   │   └── page.tsx  # Formulário de login
-│   │   └── proposals/    # Gerenciamento de propostas
-│   └── proposals/         # Visualização pública de propostas
-├── components/            # Componentes reutilizáveis
-│   ├── MarkdownRenderer.tsx # Renderizador de markdown com temas
-│   └── auth/             # Componentes de autenticação
-│       ├── LoginForm.tsx # Formulário de login
-│       └── AuthGuard.tsx # Componente de proteção de rotas
-├── lib/                   # Utilitários e configurações
-│   ├── supabase/         # Configuração do Supabase
-│   │   ├── config.ts     # Configuração do cliente
-│   │   └── auth.ts       # Funções de autenticação
-│   └── themes/           # Configurações de temas (definidas no código)
-└── types/                # Definições de tipos TypeScript
+├── app/                    # Next.js main directory
+│   ├── page.tsx           # Home page (under construction)
+│   ├── admin/             # Admin area (protected)
+│   │   ├── layout.tsx    # Layout with authentication check
+│   │   ├── page.tsx      # Main dashboard
+│   │   ├── login/        # Admin login page
+│   │   │   └── page.tsx  # Login form
+│   │   └── proposals/    # Proposals management
+│   └── proposals/         # Public proposals view
+├── components/            # Reusable components
+│   ├── MarkdownRenderer.tsx # Markdown renderer with themes
+│   └── auth/             # Authentication components
+│       ├── LoginForm.tsx # Login form component
+│       └── AuthGuard.tsx # Route protection component
+├── lib/                   # Utilities and configurations
+│   ├── supabase/         # Supabase configuration
+│   │   ├── config.ts     # Client configuration
+│   │   └── auth.ts       # Authentication functions
+│   └── themes/           # Theme configurations (defined in code)
+└── types/                # TypeScript type definitions
 ```
 
-### Funcionalidades Principais
+### Core Features
 
-1. **Autenticação**
+1. **Authentication**
 
-   - Login via email/senha
-   - Contas inicialmente desativadas
-   - Ativação manual via Supabase
-   - Proteção de rotas administrativas
-   - Redirecionamento automático para login
+   - Email/password login
+   - Initially deactivated accounts
+   - Manual activation via Supabase
+   - Admin route protection
+   - Automatic login redirection
 
-2. **CMS de Propostas**
+2. **Proposals CMS**
 
-   - Criação e edição de propostas em Markdown
-   - Armazenamento no Supabase
-   - Sistema de compartilhamento via links únicos
-   - Visualização pública das propostas
+   - Create and edit proposals in Markdown
+   - Storage in Supabase
+   - Unique link sharing system
+   - Public proposal viewing
 
-3. **Sistema de Temas**
-   - Temas predefinidos no código:
-     - Padrão (Default)
+3. **Theme System**
+   - Predefined themes in code:
+     - Default
      - Gamer
-     - Negócios
-     - Divertido
-   - Cada tema define estilos para:
+     - Business
+     - Fun
+   - Each theme defines styles for:
      - Containers
-     - Títulos
-     - Parágrafos
-     - Listas
+     - Headings
+     - Paragraphs
+     - Lists
      - Links
-     - Códigos
-     - Citações
-     - Tabelas
+     - Code blocks
+     - Blockquotes
+     - Tables
 
-### Modelo de Dados (Supabase)
+### Data Model (Supabase)
 
 ```sql
--- Tabela de Propostas
+-- Proposals Table
 proposals
   - id: uuid
   - title: string
   - content: text (markdown)
-  - theme_id: string (referência ao ID do tema definido no código)
+  - theme_id: string (reference to theme ID defined in code)
   - created_at: timestamp
   - updated_at: timestamp
   - share_key: string
   - is_active: boolean
 ```
 
-## Configuração do Ambiente
+## Environment Setup
 
-1. Instalar dependências:
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-2. Configurar variáveis de ambiente:
+2. Configure environment variables:
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. Configurar Supabase:
+3. Configure Supabase:
 
-- Criar projeto no Supabase
-- Adicionar credenciais no .env.local
-- Executar migrations iniciais
+- Create project in Supabase
+- Add credentials to .env.local
+- Run initial migrations
 
-4. Iniciar desenvolvimento:
+4. Start development:
 
 ```bash
 npm run dev
 ```
 
-5. Atualizar os tipos de dados
+5. Update data types
 
 ```bash
 npx supabase gen types typescript --project-id "your-project-id" --schema public > types/supabase.ts
 ```
 
-## Próximos Passos
+## TODO
 
-1. Implementar autenticação básica
-2. Criar estrutura do CMS
-3. Implementar visualização de propostas
-4. Adicionar sistema de compartilhamento
+- [ ] Implement a more abstract CMS system (proposals or pages)
+- [ ] Add node types (e.g., proposal as a type with connections)
+- [ ] Add file attachments to nodes
+- [ ] Implement node search functionality
+- [ ] Add node filtering capabilities
+- [ ] Implement node sorting
+- [ ] Add node pagination

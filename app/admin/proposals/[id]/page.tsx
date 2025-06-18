@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import { themes, getThemeById } from "@/lib/themes";
@@ -31,15 +31,7 @@ export default function ProposalPage({ params }: ProposalPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
 
-  useEffect(() => {
-    if (params.id !== "new") {
-      fetchProposal();
-    } else {
-      setLoading(false);
-    }
-  }, [params.id]);
-
-  const fetchProposal = async () => {
+  const fetchProposal = useCallback(async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -55,7 +47,15 @@ export default function ProposalPage({ params }: ProposalPageProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [params.id]);
+
+  useEffect(() => {
+    if (params.id !== "new") {
+      fetchProposal();
+    } else {
+      setLoading(false);
+    }
+  }, [params.id, fetchProposal]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -184,7 +184,7 @@ export default function ProposalPage({ params }: ProposalPageProps) {
             <textarea
               name="content"
               id="content"
-              defaultValue={proposal?.content}
+              defaultValue={proposal?.content ?? ""}
               required
               rows={20}
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary font-mono"

@@ -40,5 +40,5 @@ export async function createProject(formData: FormData) {
     return;
   }
 
-  redirect(`/admin/mindmap/${project.id}`);
+  redirect(`/admin/project/${project.id}`);
 }

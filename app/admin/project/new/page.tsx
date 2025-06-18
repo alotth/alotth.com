@@ -19,7 +19,7 @@ export default function NewMindmapPage() {
             id="title"
             name="title"
             required
-            className="w-full px-3 py-2 border rounded-md"
+            className="w-full px-3 py-2 border rounded-md text-gray-900"
             placeholder="Enter mindmap title"
           />
         </div>
@@ -35,7 +35,7 @@ export default function NewMindmapPage() {
             id="description"
             name="description"
             rows={3}
-            className="w-full px-3 py-2 border rounded-md"
+            className="w-full px-3 py-2 border rounded-md text-gray-900"
             placeholder="Enter mindmap description"
           />
         </div>

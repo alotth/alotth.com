@@ -116,35 +116,35 @@ create policy "Only admins can delete projects"
 
 ## API Routes (Next.js App Router)
 
-1. `app/api/admin/mindmap/projects/route.ts`
+1. `app/api/admin/project/projects/route.ts`
 
    - GET: List all projects for admins
    - POST: Create a new project
 
-2. `app/api/admin/mindmap/projects/[id]/route.ts`
+2. `app/api/admin/project/projects/[id]/route.ts`
 
    - GET: Get project details
    - PUT: Update project
    - DELETE: Delete project
 
-3. `app/api/admin/mindmap/projects/[id]/nodes/route.ts`
+3. `app/api/admin/project/projects/[id]/nodes/route.ts`
 
    - GET: List nodes in project
    - POST: Create new node
 
-4. `app/api/admin/mindmap/projects/[id]/edges/route.ts`
+4. `app/api/admin/project/projects/[id]/edges/route.ts`
    - GET: List edges in project
    - POST: Create new edge
 
 ## Frontend Components
 
-### 1. Project List Component (`components/admin/mindmap/ProjectList.tsx`)
+### 1. Project List Component (`components/admin/project/ProjectList.tsx`)
 
 - Display list of mindmap projects
 - Create new project button
 - Project preview cards
 
-### 2. Mindmap Editor Component (`components/admin/mindmap/Editor.tsx`)
+### 2. Mindmap Editor Component (`components/admin/project/Editor.tsx`)
 
 - React Flow integration
 - Custom node types
@@ -152,14 +152,14 @@ create policy "Only admins can delete projects"
 - Node styling panel
 - Project connection handling
 
-### 3. Node Component (`components/admin/mindmap/Node.tsx`)
+### 3. Node Component (`components/admin/project/Node.tsx`)
 
 - Draggable functionality
 - Text editing
 - Style customization
 - Connection points
 
-### 4. Edge Component (`components/admin/mindmap/Edge.tsx`)
+### 4. Edge Component (`components/admin/project/Edge.tsx`)
 
 - Custom edge types
 - Label support
@@ -219,8 +219,8 @@ supabase migration new admin_mindmap_tables
 3. Create the basic project structure:
 
 ```bash
-mkdir -p app/admin/mindmap
-mkdir -p components/admin/mindmap
+mkdir -p app/admin/project
+mkdir -p components/admin/project
 ```
 
 4. Start implementing components following the phases outlined above.
