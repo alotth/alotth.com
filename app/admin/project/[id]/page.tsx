@@ -531,18 +531,9 @@ export default function MindmapPage({ params }: MindmapPageProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between p-3 sm:p-6 border-b border-border">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
-            {/* Mobile menu button */}
-            {isMobile && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-2 hover:bg-accent rounded-full flex-shrink-0"
-              >
-                <Menu size={18} />
-              </button>
-            )}
-            <h1 className="text-lg sm:text-2xl font-bold truncate">Project {projectTitle ?? ""}</h1>
+        <div className="p-3 sm:p-6 border-b border-border space-y-3">
+          {/* Top row with controls */}
+          <div className="flex items-center justify-between">
             <Select
               value={viewType}
               onValueChange={(value: string) => setViewType(value as ViewType)}
@@ -555,10 +546,24 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                 <SelectItem value="notes">Notes View</SelectItem>
               </SelectContent>
             </Select>
+            <Link href="/admin/project">
+              <Button variant="outline" size="sm" className="text-xs sm:text-sm whitespace-nowrap">Back to Projects</Button>
+            </Link>
           </div>
-          <Link href="/admin/project">
-            <Button variant="outline" size="sm" className="text-xs sm:text-sm">Back to Projects</Button>
-          </Link>
+          
+          {/* Bottom row with title */}
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            {/* Mobile menu button */}
+            {isMobile && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 hover:bg-accent rounded-full flex-shrink-0"
+              >
+                <Menu size={18} />
+              </button>
+            )}
+            <h1 className="text-base sm:text-xl font-bold truncate">Project {projectTitle ?? ""}</h1>
+          </div>
         </div>
 
         <div className="flex-1 overflow-hidden">

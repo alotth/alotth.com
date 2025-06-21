@@ -54,10 +54,11 @@ export function Toolbar({
 
   return (
     <div className="flex flex-col sm:flex-row gap-2 bg-white p-2 sm:p-3 rounded-md shadow-md text-gray-900 min-w-0">
-      {/* Toggle collapse button - only show on larger screens */}
+      {/* Toggle collapse button - show on all screen sizes */}
       <button
         onClick={() => setCollapsed((prev) => !prev)}
-        className="hidden sm:block self-end text-gray-700 hover:text-gray-900 p-1"
+        className="self-end text-gray-700 hover:text-gray-900 p-1"
+        title={collapsed ? "Expand toolbar" : "Collapse toolbar"}
       >
         {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
       </button>
