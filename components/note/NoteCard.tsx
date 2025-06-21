@@ -49,9 +49,9 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
   return (
     <div
       className={cn(
-        "p-4 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200",
+        "p-3 sm:p-4 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200",
         isExpanded ? "w-full" : "w-full",
-        !isExpanded && !isEditing && "max-h-[300px] overflow-hidden"
+        !isExpanded && !isEditing && "max-h-[250px] sm:max-h-[300px] overflow-hidden"
       )}
       onClick={!isEditing ? handleOnClick : undefined}
     >
@@ -60,19 +60,19 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
           <MarkdownEditor
             value={text}
             onChange={setText}
-            rows={8}
+            rows={6}
             preview={false}
           />
           <div className="flex gap-2">
             <button
               onClick={handleSave}
-              className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+              className="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm flex-1 sm:flex-initial"
             >
               Save
             </button>
             <button
               onClick={handleCancel}
-              className="px-3 py-1 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-sm"
+              className="px-3 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 text-sm flex-1 sm:flex-initial"
             >
               Cancel
             </button>
@@ -83,20 +83,20 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
           <ReactMarkdown
             components={{
               h1: ({ children }) => (
-                <h1 className="text-2xl font-bold mb-2">{children}</h1>
+                <h1 className="text-lg sm:text-2xl font-bold mb-2">{children}</h1>
               ),
               h2: ({ children }) => (
-                <h2 className="text-xl font-bold mb-2">{children}</h2>
+                <h2 className="text-base sm:text-xl font-bold mb-2">{children}</h2>
               ),
               h3: ({ children }) => (
-                <h3 className="text-lg font-bold mb-2">{children}</h3>
+                <h3 className="text-sm sm:text-lg font-bold mb-2">{children}</h3>
               ),
-              p: ({ children }) => <p className="mb-2">{children}</p>,
+              p: ({ children }) => <p className="mb-2 text-sm sm:text-base">{children}</p>,
               ul: ({ children }) => (
-                <ul className="list-disc pl-4 mb-2">{children}</ul>
+                <ul className="list-disc pl-4 mb-2 text-sm sm:text-base">{children}</ul>
               ),
               ol: ({ children }) => (
-                <ol className="list-decimal pl-4 mb-2">{children}</ol>
+                <ol className="list-decimal pl-4 mb-2 text-sm sm:text-base">{children}</ol>
               ),
               li: ({ children }) => <li className="mb-1">{children}</li>,
               strong: ({ children }) => (
@@ -104,15 +104,15 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
               ),
               em: ({ children }) => <em className="italic">{children}</em>,
               code: ({ children }) => (
-                <code className="bg-gray-100 px-1 rounded">{children}</code>
+                <code className="bg-gray-100 px-1 rounded text-xs sm:text-sm">{children}</code>
               ),
               pre: ({ children }) => (
-                <pre className="bg-gray-100 p-2 rounded mb-2 overflow-x-auto">
+                <pre className="bg-gray-100 p-2 rounded mb-2 overflow-x-auto text-xs sm:text-sm">
                   {children}
                 </pre>
               ),
               blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-gray-300 pl-4 italic mb-2">
+                <blockquote className="border-l-4 border-gray-300 pl-4 italic mb-2 text-sm sm:text-base">
                   {children}
                 </blockquote>
               ),
@@ -139,7 +139,7 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
               <Link
                 key={project.project_id}
                 href={`/admin/project/${project.project_id}`}
-                className="px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors"
+                className="px-2 py-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 transition-colors text-xs"
               >
                 {project.project_title}
               </Link>
@@ -153,7 +153,7 @@ const NoteCard = ({ id, content, onContentChange }: NoteCardProps) => {
             e.stopPropagation();
             setIsExpanded(!isExpanded);
           }}
-          className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+          className="mt-2 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
         >
           {isExpanded ? "Collapse" : "Expand"}
         </button>

@@ -196,24 +196,24 @@ export default function MindmapPage() {
     };
 
     return (
-      <div className="relative px-4 py-2 bg-black border-2 border-white rounded shadow-md min-w-[120px] text-center select-none">
+      <div className="relative px-3 py-2 bg-black border-2 border-white rounded shadow-md min-w-[100px] max-w-[250px] text-center select-none">
         {/* Title */}
-        <div className="font-medium text-white pointer-events-none mb-1">{label}</div>
+        <div className="font-medium text-white pointer-events-none mb-1 text-sm">{label}</div>
 
         {/* Description */}
         {expanded && description && (
-          <div className="text-left px-2 text-white/80 max-w-[300px] mx-auto mb-1 relative group">
+          <div className="text-left px-2 text-white/80 max-w-[220px] mx-auto mb-1 relative group">
             <div className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity z-10">
               <Button
                 variant="ghost"
                 size="icon"
-                className="pointer-events-auto"
+                className="pointer-events-auto h-6 w-6"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleEdit(id, description);
                 }}
               >
-                <Edit2 className="h-4 w-4 text-white hover:text-primary" />
+                <Edit2 className="h-3 w-3 text-white hover:text-primary" />
               </Button>
             </div>
             <div className="pointer-events-none">
@@ -231,19 +231,19 @@ export default function MindmapPage() {
         {description && (
           <button
             onClick={toggle}
-            className="absolute bottom-1 left-1 text-white hover:text-primary"
+            className="absolute bottom-1 left-1 text-white hover:text-primary p-1"
           >
-            {expanded ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+            {expanded ? <ChevronLeft size={12} /> : <ChevronRight size={12} />}
           </button>
         )}
 
         {/* Link icon */}
         <Link
           href={`/admin/project/${id}`}
-          className="absolute top-1 right-1 text-white hover:text-primary"
+          className="absolute top-1 right-1 text-white hover:text-primary p-1"
           onClick={(e) => e.stopPropagation()}
         >
-          <ExternalLink size={14} />
+          <ExternalLink size={12} />
         </Link>
 
         {/* Connection handles */}
@@ -326,8 +326,8 @@ export default function MindmapPage() {
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-xl shadow-lg">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-xl shadow-lg max-h-[90vh] overflow-y-auto">
           <h2 className="text-lg font-semibold mb-4">Create New Project</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -338,7 +338,7 @@ export default function MindmapPage() {
                 required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md text-gray-900"
+                className="w-full px-3 py-2 border rounded-md text-gray-900 text-base"
               />
             </div>
             <div>
@@ -350,9 +350,9 @@ export default function MindmapPage() {
                 rows={4}
               />
             </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-              <Button type="submit" disabled={submitting}>{submitting ? "Creating..." : "Create"}</Button>
+            <div className="flex flex-col sm:flex-row justify-end gap-3">
+              <Button variant="outline" type="button" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+              <Button type="submit" disabled={submitting} className="w-full sm:w-auto">{submitting ? "Creating..." : "Create"}</Button>
             </div>
           </form>
         </div>
@@ -435,24 +435,24 @@ export default function MindmapPage() {
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-2xl shadow-lg">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
           <h2 className="text-lg font-semibold mb-4">Import Projects (JSON)</h2>
           <div className="mb-2">
-            <Button variant="outline" onClick={copyExample} type="button" className="text-sm">
+            <Button variant="outline" onClick={copyExample} type="button" className="text-sm w-full sm:w-auto">
               Load Example JSON
             </Button>
           </div>
           <textarea
             value={jsonText}
             onChange={(e) => setJsonText(e.target.value)}
-            rows={10}
-            className="w-full px-3 py-2 border rounded-md text-gray-900 mb-4"
+            rows={8}
+            className="w-full px-3 py-2 border rounded-md text-gray-900 mb-4 text-sm"
             placeholder="Paste JSON here..."
           />
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleImport} disabled={importing}>{importing ? "Importing..." : "Import"}</Button>
+          <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <Button variant="outline" type="button" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+            <Button onClick={handleImport} disabled={importing} className="w-full sm:w-auto">{importing ? "Importing..." : "Import"}</Button>
           </div>
         </div>
       </div>
@@ -527,8 +527,8 @@ export default function MindmapPage() {
     };
 
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-        <div className="bg-white dark:bg-gray-900 rounded-lg p-6 w-full max-w-2xl shadow-lg">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
           <h2 className="text-lg font-semibold mb-4">Edit Description</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -540,9 +540,9 @@ export default function MindmapPage() {
                 rows={8}
               />
             </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" type="button" onClick={onClose}>Cancel</Button>
-              <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+            <div className="flex flex-col sm:flex-row justify-end gap-3">
+              <Button variant="outline" type="button" onClick={onClose} className="w-full sm:w-auto">Cancel</Button>
+              <Button type="submit" disabled={saving} className="w-full sm:w-auto">{saving ? "Saving..." : "Save"}</Button>
             </div>
           </form>
         </div>
@@ -568,20 +568,22 @@ export default function MindmapPage() {
   }
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Mindmap</h1>
+    <div className="p-4 sm:p-6">
+      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Mindmap</h1>
 
       {/* View type selector */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-2 sm:gap-4 mb-4 sm:mb-6 overflow-x-auto">
         <Button
           variant={viewType === "list" ? "default" : "outline"}
           onClick={() => setViewType("list")}
+          className="whitespace-nowrap text-sm"
         >
           List View
         </Button>
         <Button
           variant={viewType === "mindmap" ? "default" : "outline"}
           onClick={() => setViewType("mindmap")}
+          className="whitespace-nowrap text-sm"
         >
           Mindmap View
         </Button>
@@ -589,36 +591,36 @@ export default function MindmapPage() {
 
       {viewType === "list" && (
         <>
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold">Your Projects</h2>
-            <div className="flex gap-3">
-              <Button onClick={() => setShowCreateModal(true)}>Create New Project</Button>
-              <Button variant="outline" onClick={() => setShowImportModal(true)}>Import Projects</Button>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 gap-4">
+            <h2 className="text-lg sm:text-xl font-semibold">Your Projects</h2>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button onClick={() => setShowCreateModal(true)} className="text-sm">Create New Project</Button>
+              <Button variant="outline" onClick={() => setShowImportModal(true)} className="text-sm">Import Projects</Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {projects?.map((project) => (
               <div
                 key={project.id}
-                className="block p-4 border rounded-lg hover:border-primary transition-colors"
+                className="block p-3 sm:p-4 border rounded-lg hover:border-primary transition-colors"
               >
                 <Link href={`/admin/project/${project.id}`} className="block">
-                  <h3 className="font-medium mb-2">{project.title}</h3>
+                  <h3 className="font-medium mb-2 text-sm sm:text-base">{project.title}</h3>
                   <div className="relative">
                     {project.description && (
                       <div className="text-sm text-muted-foreground mb-2 group">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             handleEdit(project.id, project.description || '');
                           }}
                         >
-                          <Edit2 className="h-4 w-4" />
+                          <Edit2 className="h-3 w-3" />
                         </Button>
                         <ReactMarkdown 
                           className="prose dark:prose-invert prose-sm max-w-none"
@@ -636,7 +638,8 @@ export default function MindmapPage() {
                 <Button
                   variant="destructive"
                   onClick={() => deleteProject(project.id)}
-                  className="mt-2"
+                  className="mt-2 w-full sm:w-auto text-sm"
+                  size="sm"
                 >
                   Delete
                 </Button>
@@ -653,7 +656,7 @@ export default function MindmapPage() {
       )}
 
       {viewType === "mindmap" && (
-        <div className="h-[70vh] border rounded">
+        <div className="h-[60vh] sm:h-[70vh] border rounded">
           <ReactFlow
             nodes={flowNodes}
             edges={flowEdges}
@@ -663,6 +666,8 @@ export default function MindmapPage() {
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ padding: 0.2 }}
+            minZoom={0.1}
+            maxZoom={2}
           >
             <Background />
             <Controls />

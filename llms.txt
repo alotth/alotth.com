@@ -1,0 +1,156 @@
+PROJECT DESCRIPTION:
+Next.js web application with admin dashboard, mindmap visualization, and proposal management system. The application uses Supabase for backend services including authentication, database, and storage. The system allows for project management, proposal tracking, and visual mindmap creation for project planning.
+
+CONVENTIONS:
+- Next.js 13+ App Router pattern for routing and layouts
+- TypeScript for all components and files
+- Feature-based component organization in /components directory
+- Admin features isolated under /app/admin
+- Tailwind CSS for styling with custom theme support
+- Markdown support for content rendering
+- Supabase migrations for database schema management
+- Component naming: PascalCase for components (e.g., NoteCard.tsx)
+- Page files follow Next.js conventions: page.tsx, layout.tsx
+- Server actions in separate action.ts files
+- Custom hooks prefixed with 'use' (e.g., useMindmap)
+- UI components organized in /components/ui
+- Feature-specific components in dedicated folders (e.g., /components/admin/mindmap)
+- ReactFlow components and custom nodes in mindmap directory
+
+TECHNOLOGIES:
+- Next.js 13+ (App Router)
+- TypeScript
+- Supabase (Auth, Database, Storage)
+  - Custom authentication flows
+  - Database migrations
+  - Storage bucket management
+- Tailwind CSS
+  - Custom theme configuration
+  - Responsive design patterns
+- React
+  - Server Components
+  - Client Components where needed
+  - Custom hooks for state management
+- ReactFlow
+  - Custom node types
+  - Edge customization
+  - Interactive canvas
+  - Minimap integration
+  - Controls customization
+  - Background patterns
+  - Node dragging and connection logic
+- Markdown processing
+  - Custom markdown editor
+  - Markdown rendering with syntax highlighting
+- Custom mindmap implementation
+  - Built on top of ReactFlow
+  - Node/Edge management
+  - Interactive visualization
+  - Project linking capabilities
+  - Custom node styling and behaviors
+  - Drag and drop functionality
+  - Node selection and multi-selection
+
+ARCHITECTURE:
+- /app
+  - Next.js pages and routing
+  - Admin section with protected routes
+  - Proposal management pages
+  - Project management interface
+- /components
+  - Reusable React components
+  - Admin-specific components
+  - Authentication components
+  - UI component library
+  - Markdown handling components
+  - Mindmap components
+    - Custom ReactFlow nodes
+    - Edge components
+    - Control panels
+    - Node editing interfaces
+- /hooks
+  - Custom React hooks
+  - Mindmap state management
+  - ReactFlow utility hooks
+- /lib
+  - Utility functions
+  - Supabase client configuration
+  - Theme management
+  - Helper functions
+  - ReactFlow helpers and utils
+- /types
+  - TypeScript type definitions
+  - Supabase database types
+  - Mindmap specific types
+  - ReactFlow custom types
+- /supabase
+  - Database migrations
+  - Storage configuration
+  - Authentication setup
+
+IMPORTANT NOTES:
+- Authentication:
+  - Handled through Supabase
+  - Protected routes using middleware
+  - Role-based access control
+  - AuthGuard component for client-side protection
+
+- Mindmap Feature:
+  - ReactFlow as base framework
+  - Custom node types extending ReactFlow
+  - Custom edge implementations
+  - Interactive node creation and editing
+  - Edge type customization
+  - Project linking functionality
+  - Node style customization
+  - Import/Export capabilities
+  - Canvas controls and minimap
+  - Zoom and pan functionality
+  - Node connection validation
+  - Multi-select and bulk operations
+  - Undo/Redo functionality
+  - Node context menus
+
+- Data Management:
+  - Server actions for form handling
+  - Type-safe database operations
+  - Real-time updates where needed
+  - Optimistic updates for better UX
+  - Mindmap state persistence
+  - Node position tracking
+
+- UI/UX:
+  - Theme switching (light/dark mode)
+  - Responsive design
+  - Toast notifications system
+  - Custom UI components
+  - Image upload with preview
+  - Markdown editor with preview
+  - Interactive canvas controls
+  - Drag and drop interfaces
+
+- Database Schema:
+  - Projects table
+  - Proposals table
+  - Mindmap nodes and edges tables
+  - User authentication tables
+  - Storage buckets for assets
+  - Node position and state persistence
+
+- Performance Considerations:
+  - Server-side rendering where appropriate
+  - Client-side interactivity for mindmap
+  - ReactFlow optimization techniques
+  - Canvas rendering optimization
+  - Image optimization
+  - Lazy loading for large components
+  - State management optimization
+
+DEVELOPMENT WORKFLOW:
+- Feature branches for new development
+- Database changes through migrations
+- TypeScript strict mode enabled
+- Component-first development approach
+- Reusable UI components in ui/ directory
+- ReactFlow component isolation
+- Custom node development process 

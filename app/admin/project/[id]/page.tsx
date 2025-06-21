@@ -20,7 +20,7 @@ import { Node, Edge, NodeChange } from "reactflow";
 import Dagre from "@dagrejs/dagre";
 import { MindmapProject } from "@/types/mindmap";
 import { getAvailableProjects } from "@/lib/mindmap";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
 
 interface MindmapPageProps {
   params: {
@@ -48,8 +48,8 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
   textareaRef,
 }) => {
   return (
-    <div className="mb-6 w-full min-w-[100px] max-w-[500px]">
-      <div className="p-4 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200">
+    <div className="mb-4 sm:mb-6 w-full min-w-[100px] max-w-[500px]">
+      <div className="p-3 sm:p-4 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200">
         {creatingNote ? (
           <div className="flex gap-2">
             <textarea
@@ -58,7 +58,7 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
               onChange={(e) => setNewNoteText(e.target.value)}
               onBlur={saveNewNote}
               placeholder="Write your note..."
-              className="w-full min-h-[80px] font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900"
+              className="w-full min-h-[60px] sm:min-h-[80px] font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900 text-sm sm:text-base"
             />
             <button
               onClick={(e) => {
@@ -66,13 +66,13 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
                 e.stopPropagation();
                 saveNewNote();
               }}
-              className="self-end p-2 rounded-full hover:bg-gray-100 transition-colors"
+              className="self-end p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
               title="Add note"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="24"
-                height="24"
+                width="20"
+                height="20"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -88,7 +88,7 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
           </div>
         ) : (
           <div
-            className="text-gray-500 cursor-text"
+            className="text-gray-500 cursor-text text-sm sm:text-base"
             onClick={() => setCreatingNote(true)}
           >
             Take a note...
@@ -166,7 +166,14 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   });
   const [lastProjectNodeAdded, setLastProjectNodeAdded] = useState<number>(0);
   const [projects, setProjects] = useState<MindmapProject[]>([]);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    // Auto-collapse on mobile by default
+    if (typeof window !== "undefined") {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+  const [sidebarOpen, setSidebarOpen] = useState(false); // For mobile overlay
   const [projectsLoading, setProjectsLoading] = useState(true);
 
   const {
@@ -188,6 +195,20 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   const [creatingNote, setCreatingNote] = useState(false);
   const [newNoteText, setNewNoteText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Handle window resize for responsive sidebar
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        setSidebarCollapsed(true);
+        setSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Persist on change
   useEffect(() => {
@@ -424,34 +445,52 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-16 w-16 sm:h-32 sm:w-32 border-t-2 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-red-500">Error: {error.message}</div>
+      <div className="flex items-center justify-center h-screen bg-background p-4">
+        <div className="text-red-500 text-center text-sm sm:text-base">Error: {error.message}</div>
       </div>
     );
   }
 
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
   return (
     <div className="flex h-screen bg-background text-foreground">
+      {/* Mobile overlay for sidebar */}
+      {isMobile && sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Project List Sidebar */}
       <div 
-        className={`border-r border-border bg-background transition-all duration-200 ${
-          sidebarCollapsed ? 'w-12' : 'w-64'
+        className={`border-r border-border bg-background transition-all duration-200 z-50 ${
+          isMobile 
+            ? `fixed left-0 top-0 h-full ${sidebarOpen ? 'w-64' : 'w-0'} overflow-hidden`
+            : sidebarCollapsed ? 'w-12' : 'w-64'
         } flex flex-col`}
       >
         <div className="flex items-center justify-between p-2 border-b border-border">
-          {!sidebarCollapsed && <h3 className="font-medium">Projects</h3>}
+          {(!sidebarCollapsed || (isMobile && sidebarOpen)) && <h3 className="font-medium text-sm sm:text-base">Projects</h3>}
           <button
-            onClick={() => setSidebarCollapsed(prev => !prev)}
+            onClick={() => {
+              if (isMobile) {
+                setSidebarOpen(false);
+              } else {
+                setSidebarCollapsed(prev => !prev);
+              }
+            }}
             className="p-1 hover:bg-accent rounded-full"
           >
-            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+            {isMobile ? <X size={18} /> : (sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />)}
           </button>
         </div>
         
@@ -466,15 +505,16 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                 <Link 
                   key={project.id} 
                   href={`/admin/project/${project.id}`}
+                  onClick={() => isMobile && setSidebarOpen(false)}
                   className={`block p-2 rounded-md transition-colors ${
                     project.id === id 
                       ? 'bg-accent text-accent-foreground' 
                       : 'hover:bg-accent/50'
                   }`}
                 >
-                  {!sidebarCollapsed && (
+                  {(!sidebarCollapsed || (isMobile && sidebarOpen)) && (
                     <div>
-                      <div className="font-medium truncate">{project.title}</div>
+                      <div className="font-medium truncate text-sm">{project.title}</div>
                       {project.description && (
                         <div className="text-xs text-muted-foreground truncate">
                           {project.description}
@@ -491,14 +531,23 @@ export default function MindmapPage({ params }: MindmapPageProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold">Project {projectTitle ?? ""}</h1>
+        <div className="flex items-center justify-between p-3 sm:p-6 border-b border-border">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+            {/* Mobile menu button */}
+            {isMobile && (
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 hover:bg-accent rounded-full flex-shrink-0"
+              >
+                <Menu size={18} />
+              </button>
+            )}
+            <h1 className="text-lg sm:text-2xl font-bold truncate">Project {projectTitle ?? ""}</h1>
             <Select
               value={viewType}
               onValueChange={(value: string) => setViewType(value as ViewType)}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[140px] sm:w-[180px] text-sm">
                 <SelectValue placeholder="Select view" />
               </SelectTrigger>
               <SelectContent>
@@ -508,7 +557,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             </Select>
           </div>
           <Link href="/admin/project">
-            <Button variant="outline">Back to Projects</Button>
+            <Button variant="outline" size="sm" className="text-xs sm:text-sm">Back to Projects</Button>
           </Link>
         </div>
 
@@ -530,19 +579,21 @@ export default function MindmapPage({ params }: MindmapPageProps) {
               />
             </div>
           ) : (
-            <div className="p-6 overflow-auto">
-              <div className="flex items-center mb-6">
-                <Toolbar
-                  onAddNode={handleAddNode}
-                  onAddProjectNode={handleAddProjectNode}
-                  onStyleChange={() => {}}
-                  onImportJSON={() => {}}
-                  selectedNode={null}
-                  selectedEdge={null}
-                  currentProjectId={id}
-                  onAutoOrganize={handleAutoOrganize}
-                />
-                <div className="w-full flex items-center justify-center gap-4">
+            <div className="p-3 sm:p-6 overflow-auto">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center mb-4 sm:mb-6 gap-4">
+                <div className="w-full sm:w-auto overflow-x-auto">
+                  <Toolbar
+                    onAddNode={handleAddNode}
+                    onAddProjectNode={handleAddProjectNode}
+                    onStyleChange={() => {}}
+                    onImportJSON={() => {}}
+                    selectedNode={null}
+                    selectedEdge={null}
+                    currentProjectId={id}
+                    onAutoOrganize={handleAutoOrganize}
+                  />
+                </div>
+                <div className="w-full flex items-center justify-center">
                   <QuickCreateNote
                     creatingNote={creatingNote}
                     setCreatingNote={setCreatingNote}
@@ -554,7 +605,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {nodes.map((node) => (
                   <NoteCard
                     key={node.id}
