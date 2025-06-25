@@ -18,9 +18,13 @@ import { v4 as uuidv4 } from "uuid";
 import { Dispatch, SetStateAction } from "react";
 import { Node, Edge, NodeChange } from "reactflow";
 import Dagre from "@dagrejs/dagre";
-import { MindmapProject } from "@/types/mindmap";
+import { MindmapProject, Priority, WorkflowStatus } from "@/types/mindmap";
 import { getAvailableProjects } from "@/lib/mindmap";
 import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { PrioritySelect } from "@/components/ui/priority-select";
+import { WorkflowSelect } from "@/components/ui/workflow-select";
+import { DatePicker } from "@/components/ui/date-picker";
+import { MarkdownEditor } from "@/components/ui/markdown-editor";
 
 interface MindmapPageProps {
   params: {
@@ -35,8 +39,7 @@ interface QuickCreateNoteProps {
   setCreatingNote: Dispatch<SetStateAction<boolean>>;
   newNoteText: string;
   setNewNoteText: Dispatch<SetStateAction<string>>;
-  saveNewNote: () => void;
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  saveNewNote: (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null) => void;
 }
 
 const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
@@ -45,50 +48,70 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
   newNoteText,
   setNewNoteText,
   saveNewNote,
-  textareaRef,
 }) => {
+  const [priority, setPriority] = useState<Priority | null>(null);
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
+  const [dueDate, setDueDate] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    // Pass the workflow attributes to saveNewNote
+    await saveNewNote(priority, workflowStatus, dueDate);
+    // Reset form
+    setPriority(null);
+    setWorkflowStatus(null);
+    setDueDate(null);
+  };
+
+  const handleCancel = () => {
+    setCreatingNote(false);
+    setNewNoteText("");
+    setPriority(null);
+    setWorkflowStatus(null);
+    setDueDate(null);
+  };
+
   return (
     <div className="mb-4 sm:mb-6 w-full min-w-[100px] max-w-[500px]">
-      <div className="p-3 sm:p-4 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200">
+      <div className="p-4 rounded-lg border bg-card text-card-foreground transition-all duration-200">
         {creatingNote ? (
-          <div className="flex gap-2">
-            <textarea
-              ref={textareaRef}
+          <div className="space-y-4">
+            <MarkdownEditor
               value={newNoteText}
-              onChange={(e) => setNewNoteText(e.target.value)}
-              onBlur={saveNewNote}
+              onChange={setNewNoteText}
               placeholder="Write your note..."
-              className="w-full min-h-[60px] sm:min-h-[80px] font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900 text-sm sm:text-base"
             />
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                saveNewNote();
-              }}
-              className="self-end p-2 rounded-full hover:bg-gray-100 transition-colors flex-shrink-0"
-              title="Add note"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-gray-500"
-              >
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </button>
+            
+            <div className="space-y-2 border-t dark:border-gray-700 pt-3">
+              <div className="text-xs font-medium text-muted-foreground mb-2">Controles de Workflow</div>
+              <div className="flex flex-wrap gap-2">
+                <PrioritySelect
+                  value={priority}
+                  onValueChange={setPriority}
+                />
+                <WorkflowSelect
+                  value={workflowStatus}
+                  onValueChange={setWorkflowStatus}
+                />
+                <DatePicker
+                  value={dueDate}
+                  onValueChange={setDueDate}
+                  placeholder="Nenhuma data"
+                />
+              </div>
+            </div>
+            
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleSave}>
+                Save
+              </Button>
+              <Button onClick={handleCancel} variant="ghost">
+                Cancel
+              </Button>
+            </div>
           </div>
         ) : (
           <div
-            className="text-gray-500 cursor-text text-sm sm:text-base"
+            className="text-muted-foreground cursor-text text-sm sm:text-base"
             onClick={() => setCreatingNote(true)}
           >
             Take a note...
@@ -194,7 +217,6 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   const [projectTitle, setProjectTitle] = useState<string | null>(null);
   const [creatingNote, setCreatingNote] = useState(false);
   const [newNoteText, setNewNoteText] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Handle window resize for responsive sidebar
   useEffect(() => {
@@ -271,6 +293,9 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             borderWidth: 2,
             fontSize: 14,
           },
+          priority: null,
+          workflowStatus: null,
+          dueDate: null,
         },
       };
 
@@ -297,6 +322,9 @@ export default function MindmapPage({ params }: MindmapPageProps) {
               borderWidth: 2,
               fontSize: 14,
             },
+            priority: null,
+            workflowStatus: null,
+            dueDate: null,
           },
         }, linkedProjectId);
         setLastProjectNodeAdded(Date.now());
@@ -335,6 +363,9 @@ export default function MindmapPage({ params }: MindmapPageProps) {
               borderWidth: 2,
               fontSize: 14,
             },
+            priority: null,
+            workflowStatus: null,
+            dueDate: null,
           },
         });
       }
@@ -380,7 +411,27 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     updateNode(nodeId, { content: newContent });
   };
 
-  const saveNewNote = async () => {
+  const handleNotePinnedChange = (nodeId: string, isPinned: boolean) => {
+    updateNode(nodeId, { isPinned });
+  };
+
+  const handleNoteArchivedChange = (nodeId: string, isArchived: boolean) => {
+    updateNode(nodeId, { isArchived });
+  };
+
+  const handleNotePriorityChange = (nodeId: string, priority: Priority) => {
+    updateNode(nodeId, { priority });
+  };
+
+  const handleNoteWorkflowStatusChange = (nodeId: string, workflowStatus: WorkflowStatus) => {
+    updateNode(nodeId, { workflowStatus });
+  };
+
+  const handleNoteDueDateChange = (nodeId: string, dueDate: string | null) => {
+    updateNode(nodeId, { dueDate });
+  };
+
+  const saveNewNote = async (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null) => {
     if (newNoteText.trim() === "") {
       setCreatingNote(false);
       setNewNoteText("");
@@ -398,6 +449,9 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             borderWidth: 2,
             fontSize: 14,
           },
+          priority: priority || null,
+          workflowStatus: workflowStatus || null,
+          dueDate: dueDate || null,
         },
       });
       setNewNoteText("");
@@ -406,12 +460,6 @@ export default function MindmapPage({ params }: MindmapPageProps) {
       console.error("Failed to create note", err);
     }
   };
-
-  useEffect(() => {
-    if (creatingNote && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [creatingNote]);
 
   // Add handleAutoOrganize for the toolbar
   const handleAutoOrganize = useCallback(() => {
@@ -459,7 +507,6 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   }
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
-
   return (
     <div className="flex h-screen bg-background text-foreground">
       {/* Mobile overlay for sidebar */}
@@ -512,7 +559,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                       : 'hover:bg-accent/50'
                   }`}
                 >
-                  {(!sidebarCollapsed || (isMobile && sidebarOpen)) && (
+                  {(!sidebarCollapsed || (isMobile && sidebarOpen)) ? (
                     <div>
                       <div className="font-medium truncate text-sm">{project.title}</div>
                       {project.description && (
@@ -520,6 +567,10 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                           {project.description}
                         </div>
                       )}
+                    </div>
+                  ) : (
+                    <div className="font-medium text-sm text-center">
+                      {project.title.slice(0, 3)}
                     </div>
                   )}
                 </Link>
@@ -584,41 +635,63 @@ export default function MindmapPage({ params }: MindmapPageProps) {
               />
             </div>
           ) : (
-            <div className="p-3 sm:p-6 overflow-auto">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center mb-4 sm:mb-6 gap-4">
-                <div className="w-full sm:w-auto overflow-x-auto">
-                  <Toolbar
-                    onAddNode={handleAddNode}
-                    onAddProjectNode={handleAddProjectNode}
-                    onStyleChange={() => {}}
-                    onImportJSON={() => {}}
-                    selectedNode={null}
-                    selectedEdge={null}
-                    currentProjectId={id}
-                    onAutoOrganize={handleAutoOrganize}
-                  />
+            <div className="h-full overflow-y-auto">
+              <div className="p-3 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center mb-4 sm:mb-6 gap-4">
+                  <div className="w-full sm:w-auto overflow-x-auto">
+                    <Toolbar
+                      onAddNode={handleAddNode}
+                      onAddProjectNode={handleAddProjectNode}
+                      onStyleChange={() => {}}
+                      onImportJSON={() => {}}
+                      selectedNode={null}
+                      selectedEdge={null}
+                      currentProjectId={id}
+                      onAutoOrganize={handleAutoOrganize}
+                    />
+                  </div>
+                  <div className="w-full flex items-center justify-center">
+                    <QuickCreateNote
+                      creatingNote={creatingNote}
+                      setCreatingNote={setCreatingNote}
+                      newNoteText={newNoteText}
+                      setNewNoteText={setNewNoteText}
+                      saveNewNote={saveNewNote}
+                    />
+                  </div>
                 </div>
-                <div className="w-full flex items-center justify-center">
-                  <QuickCreateNote
-                    creatingNote={creatingNote}
-                    setCreatingNote={setCreatingNote}
-                    newNoteText={newNoteText}
-                    setNewNoteText={setNewNoteText}
-                    saveNewNote={saveNewNote}
-                    textareaRef={textareaRef}
-                  />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {nodes.map((node) => (
-                  <NoteCard
-                    key={node.id}
-                    id={node.id}
-                    content={node.data.content}
-                    onContentChange={handleNoteContentChange}
-                  />
-                ))}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {nodes
+                    .sort((a, b) => {
+                      // Sort by pinned first, then by archived (non-archived first), then by creation date
+                      if (a.data.isPinned !== b.data.isPinned) {
+                        return a.data.isPinned ? -1 : 1;
+                      }
+                      if (a.data.isArchived !== b.data.isArchived) {
+                        return a.data.isArchived ? 1 : -1;
+                      }
+                      return 0;
+                    })
+                    .map((node) => (
+                      <NoteCard
+                        key={node.id}
+                        id={node.id}
+                        content={node.data.content}
+                        isPinned={node.data.isPinned}
+                        isArchived={node.data.isArchived}
+                        priority={node.data.priority}
+                        workflowStatus={node.data.workflowStatus}
+                        dueDate={node.data.dueDate}
+                        onContentChange={handleNoteContentChange}
+                        onPinnedChange={handleNotePinnedChange}
+                        onArchivedChange={handleNoteArchivedChange}
+                        onPriorityChange={handleNotePriorityChange}
+                        onWorkflowStatusChange={handleNoteWorkflowStatusChange}
+                        onDueDateChange={handleNoteDueDateChange}
+                      />
+                    ))}
+                </div>
               </div>
             </div>
           )}

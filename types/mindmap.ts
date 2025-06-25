@@ -1,5 +1,8 @@
 import { Node, Edge } from "reactflow";
 
+export type Priority = 'low' | 'medium' | 'high';
+export type WorkflowStatus = 'todo' | 'in_progress' | 'done' | 'blocked';
+
 export interface MindmapProject {
   id: string;
   title: string;
@@ -7,6 +10,8 @@ export interface MindmapProject {
   created_at: string;
   updated_at: string;
   user_id: string;
+  is_pinned: boolean;
+  is_archived: boolean;
 }
 
 export interface MindmapNodeData {
@@ -18,6 +23,11 @@ export interface MindmapNodeData {
     fontSize?: number;
   };
   onChange?: (newText: string) => void;
+  isPinned?: boolean;
+  isArchived?: boolean;
+  priority?: Priority;
+  workflowStatus?: WorkflowStatus;
+  dueDate?: string | null;
 }
 
 export interface MindmapNode {
@@ -28,6 +38,11 @@ export interface MindmapNode {
   project_id: string;
   created_at?: string;
   updated_at?: string;
+  is_pinned: boolean;
+  is_archived: boolean;
+  priority: Priority | null;
+  workflow_status: WorkflowStatus | null;
+  due_date?: string | null;
 }
 
 export interface MindmapNodeProject {
@@ -65,5 +80,17 @@ export interface MindmapNodeProjectWithNode {
   mindmap_nodes: {
     id: string;
     content: string;
+    is_pinned: boolean;
+    is_archived: boolean;
+    priority: Priority | null;
+    workflow_status: WorkflowStatus | null;
+    due_date?: string | null;
   };
+}
+
+export interface NoteWithProject extends MindmapNode {
+  project_title: string;
+  project_id: string;
+  project_is_archived: boolean;
+  project_is_pinned: boolean;
 }

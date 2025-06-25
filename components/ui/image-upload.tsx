@@ -95,22 +95,22 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         onDragLeave={handleDragLeave}
         className={`
           border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all
-          ${dragOver ? 'border-primary bg-primary/10' : 'border-gray-300 hover:border-gray-400'}
+          ${dragOver ? 'border-primary bg-primary/10' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'}
           ${disabled || uploading ? 'opacity-50 cursor-not-allowed' : ''}
         `}
       >
         {uploading ? (
           <div className="flex items-center justify-center gap-2">
             <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-primary"></div>
-            <span className="text-sm text-gray-600">Uploading...</span>
+            <span className="text-sm text-gray-600 dark:text-gray-300">Uploading...</span>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <ImageIcon className="h-8 w-8 text-gray-400" />
-            <div className="text-sm text-gray-600">
+            <ImageIcon className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+            <div className="text-sm text-gray-600 dark:text-gray-300">
               <span className="font-medium">Click to upload</span> or drag and drop
             </div>
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-gray-400 dark:text-gray-500">
               PNG, JPG, GIF up to 10MB
             </div>
           </div>

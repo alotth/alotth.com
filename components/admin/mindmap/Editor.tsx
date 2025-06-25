@@ -67,7 +67,6 @@ export function EditorMindmap({
   onAutoOrganize,
 }: EditorProps) {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [pendingPositionSaves, setPendingPositionSaves] = useState<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Debug: log changes in nodes array
   useEffect(() => {
@@ -76,7 +75,25 @@ export function EditorMindmap({
 
   // Handle node selection
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+    console.log('[EDITOR] ReactFlow onNodeClick called for node:', node.id);
     setSelectedNode(node);
+  }, []);
+
+  // Handle node double click
+  const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node) => {
+    console.log('[EDITOR] ReactFlow onNodeDoubleClick called for node:', node.id);
+    event.stopPropagation();
+    event.preventDefault();
+    
+    // Trigger edit mode directly using custom event
+    setTimeout(() => {
+      const nodeElement = document.querySelector(`[data-id="${node.id}"]`);
+      if (nodeElement) {
+        console.log('[EDITOR] Dispatching triggerEdit event for node:', node.id);
+        const editEvent = new CustomEvent('triggerEdit', { detail: { nodeId: node.id } });
+        nodeElement.dispatchEvent(editEvent);
+      }
+    }, 0);
   }, []);
 
   // Handle pane click (deselect)
@@ -84,58 +101,10 @@ export function EditorMindmap({
     setSelectedNode(null);
   }, []);
 
-  // Save node position with debounce per node
-  const saveNodePosition = useCallback((nodeId: string, position: { x: number; y: number }) => {
-    // Cancel any existing timeout for this node
-    const existingTimeout = pendingPositionSaves.get(nodeId);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-    }
-
-    // Set new timeout for this node
-    const timeout = setTimeout(() => {
-      console.log(`[EDITOR] Salvando posição do node ${nodeId}:`, position);
-      updateNode(nodeId, { position });
-      setPendingPositionSaves(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(nodeId);
-        return newMap;
-      });
-    }, 500);
-
-    setPendingPositionSaves(prev => {
-      const newMap = new Map(prev);
-      newMap.set(nodeId, timeout);
-      return newMap;
-    });
-  }, [updateNode]);
-
-  // Handle node drag stop (save position)
-  const handleNodeDragStop = useCallback((event: any, node: Node) => {
-    saveNodePosition(node.id, node.position);
-  }, [saveNodePosition]);
-
-  // Handle node changes - cancel debounce for deleted nodes
+  // Handle node changes - pass through to hook (debounce is now handled there)
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    // Check for deleted nodes and cancel their pending debounced saves
-    const deletedNodes = changes.filter(change => change.type === 'remove');
-    deletedNodes.forEach(change => {
-      console.log(`[EDITOR] Cancelando save pendente para node deletado: ${change.id}`);
-      const timeout = pendingPositionSaves.get(change.id);
-      if (timeout) {
-        clearTimeout(timeout);
-        setPendingPositionSaves(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(change.id);
-          return newMap;
-        });
-        console.log(`[EDITOR] ✅ Save cancelado para node: ${change.id}`);
-      }
-    });
-
-    // Pass to hook
     onNodesChange(changes);
-  }, [onNodesChange, pendingPositionSaves]);
+  }, [onNodesChange]);
 
   // Handle style changes
   const handleStyleChange = useCallback((newStyle: any) => {
@@ -181,10 +150,12 @@ export function EditorMindmap({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={onPaneClick}
-        onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        nodeDragThreshold={5}
+        nodesDraggable={true}
         fitView
         className="text-gray-900"
       >

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { deleteMindmapProject, getMindmapProjects, getProjectOverview, upsertProjectOverviewNodes, upsertProjectOverviewEdges, deleteProjectOverviewEdge, createMindmapProject, importMindmapProjects } from "@/lib/mindmap";
+import { deleteMindmapProject, getMindmapProjects, getProjectOverview, upsertProjectOverviewNodes, upsertProjectOverviewEdges, deleteProjectOverviewEdge, createMindmapProject, importMindmapProjects, toggleProjectPinned, toggleProjectArchived, deleteAllMindmapProjects } from "@/lib/mindmap";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { MindmapProject } from "@/types/mindmap";
 import ReactFlow, {
@@ -21,7 +21,7 @@ import ReactFlow, {
   Position,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { ExternalLink, ChevronRight, ChevronLeft, Edit2 } from "lucide-react";
+import { ExternalLink, ChevronRight, ChevronLeft, Edit2, Pin, Archive, PinOff, ArchiveRestore } from "lucide-react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -30,12 +30,12 @@ import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { NotesView } from "@/components/admin/mindmap/NotesView";
+import { getAllNotes } from "@/lib/mindmap";
 
 export default function MindmapPage() {
   const [projects, setProjects] = useState<MindmapProject[]>([]);
-  const [viewType, setViewType] = useState<"list" | "mindmap">(
-    (typeof window !== "undefined" && (localStorage.getItem("projects_view_type") as "list" | "mindmap")) || "list"
-  );
+  const [viewType, setViewType] = useState<"list" | "mindmap" | "notes">("list");
   const [flowNodes, setFlowNodes] = useState<FlowNode[]>([]);
   const [flowEdges, setFlowEdges] = useState<FlowEdge[]>([]);
   const [initializing, setInitializing] = useState(true);
@@ -57,6 +57,23 @@ export default function MindmapPage() {
       </a>
     )
   };
+
+  // Initialize viewType from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedViewType = localStorage.getItem("projects_view_type") as "list" | "mindmap" | "notes";
+      if (savedViewType) {
+        setViewType(savedViewType);
+      }
+    }
+  }, []);
+
+  // Save viewType to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("projects_view_type", viewType);
+    }
+  }, [viewType]);
 
   // Fetch overview data (positions) once on mount in parallel with projects list
   useEffect(() => {
@@ -286,12 +303,100 @@ export default function MindmapPage() {
     }
   };
 
-  // Persist viewType whenever it changes
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("projects_view_type", viewType);
+  const deleteAllProjects = async () => {
+    // First confirmation
+    if (!confirm("⚠️ ATENÇÃO: Tem certeza que deseja excluir TODOS os projetos? Esta ação não pode ser desfeita.")) {
+      return;
     }
-  }, [viewType]);
+
+    // Second confirmation with more explicit warning
+    if (!confirm("🚨 CONFIRMAÇÃO FINAL: Você está prestes a excluir permanentemente todos os seus projetos e todos os dados relacionados. Digite 'EXCLUIR TUDO' para confirmar ou cancele esta ação.")) {
+      return;
+    }
+
+    try {
+      const deletedCount = await deleteAllMindmapProjects();
+      
+      if (deletedCount === 0) {
+        toast({
+          title: "Nenhum projeto encontrado",
+          description: "Não há projetos para excluir.",
+          duration: 3000,
+        });
+        return;
+      }
+
+      setProjects([]);
+      setFlowNodes([]);
+      setFlowEdges([]);
+      
+      toast({
+        title: "Todos os projetos excluídos",
+        description: `${deletedCount} projeto(s) foram excluídos com sucesso, incluindo todos os dados relacionados.`,
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('Error deleting all projects:', error);
+      toast({
+        title: "Erro ao excluir projetos",
+        description: "Não foi possível excluir todos os projetos. Tente novamente.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleTogglePinned = async (projectId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    try {
+      await toggleProjectPinned(projectId);
+      setProjects((prev) => prev.map(p => 
+        p.id === projectId ? { ...p, is_pinned: !p.is_pinned } : p
+      ));
+      
+      toast({
+        title: "Projeto atualizado",
+        description: "O status de fixado foi alterado com sucesso.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error toggling project pinned:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível alterar o status de fixado.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  const handleToggleArchived = async (projectId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    try {
+      await toggleProjectArchived(projectId);
+      setProjects((prev) => prev.map(p => 
+        p.id === projectId ? { ...p, is_archived: !p.is_archived } : p
+      ));
+      
+      toast({
+        title: "Projeto atualizado",
+        description: "O status de arquivado foi alterado com sucesso.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error toggling project archived:', error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível alterar o status de arquivado.",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
 
   // ==================== CREATE PROJECT MODAL ====================
 
@@ -371,19 +476,31 @@ export default function MindmapPage() {
   const ImportProjectsModal: React.FC<ImportProjectsModalProps> = ({ open, onClose, onImported }) => {
     const [jsonText, setJsonText] = useState("");
     const [importing, setImporting] = useState(false);
+    const [processImages, setProcessImages] = useState(false);
 
     const exampleJson = [
       {
         "title": "Example Project A",
         "description": "Demo project with **two** interconnected nodes and an image.\n\n![Example](https://via.placeholder.com/300x200?text=Example+Image)",
+        "is_pinned": false,
+        "is_archived": false,
         "nodes": [
           {
             "content": "Start Node\n\n![Node Image](https://via.placeholder.com/150x100?text=Node+Image)",
-            "position": { "x": 0, "y": 0 }
+            "position": { "x": 0, "y": 0 },
+            "is_pinned": false,
+            "is_archived": false,
+            "priority": "high",
+            "workflow_status": "todo",
+            "due_date": "2025-07-15"
           },
           {
             "content": "End Node\n\n**This is the final step** with some _emphasis_.",
-            "position": { "x": 250, "y": 0 }
+            "position": { "x": 250, "y": 0 },
+            "is_pinned": false,
+            "is_archived": false,
+            "priority": "medium",
+            "workflow_status": "done"
           }
         ],
         "edges": [
@@ -393,14 +510,24 @@ export default function MindmapPage() {
       {
         "title": "Example Project B",
         "description": "Another project demonstrating nodes _and_ edges with markdown formatting.\n\n- Point 1\n- Point 2\n\n### Features\n- Feature A\n- Feature B",
+        "is_pinned": true,
+        "is_archived": false,
         "nodes": [
           {
             "content": "# Main Idea\n\nThis is the central concept of our project.\n\n- Research\n- Analysis\n- Documentation",
-            "position": { "x": 0, "y": 0 }
+            "position": { "x": 0, "y": 0 },
+            "is_pinned": true,
+            "is_archived": false,
+            "priority": "high",
+            "workflow_status": "in_progress"
           },
           {
             "content": "## Implementation\n\n```javascript\nconst implementation = () => {\n  return 'Working code';\n};\n```\n\nReady to deploy!",
-            "position": { "x": 300, "y": 100 }
+            "position": { "x": 300, "y": 100 },
+            "is_pinned": false,
+            "is_archived": false,
+            "priority": "low",
+            "workflow_status": "todo"
           }
         ],
         "edges": [
@@ -423,7 +550,15 @@ export default function MindmapPage() {
           alert("JSON must be an array of projects");
           return;
         }
-        await importMindmapProjects(data);
+        
+        // Use the appropriate import function based on image processing option
+        if (processImages) {
+          const { importMindmapProjectsWithImages } = await import("@/lib/mindmap");
+          await importMindmapProjectsWithImages(data);
+        } else {
+          await importMindmapProjects(data);
+        }
+        
         onClose();
         onImported();
       } catch (err) {
@@ -438,11 +573,35 @@ export default function MindmapPage() {
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
           <h2 className="text-lg font-semibold mb-4">Import Projects (JSON)</h2>
-          <div className="mb-2">
+          <div className="mb-4">
             <Button variant="outline" onClick={copyExample} type="button" className="text-sm w-full sm:w-auto">
               Load Example JSON
             </Button>
           </div>
+          
+          {/* Image Processing Option */}
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="processImages"
+              checked={processImages}
+              onChange={(e) => setProcessImages(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            <label htmlFor="processImages" className="text-sm font-medium">
+              🖼️ Process images in content (Beta)
+            </label>
+          </div>
+          {processImages && (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md text-sm">
+              <p className="font-medium text-blue-800 dark:text-blue-200">📋 Image Processing Enabled</p>
+              <p className="text-blue-600 dark:text-blue-300">
+                This will scan for markdown image references and prepare them for upload.
+                Local image files will need to be uploaded separately using the upload script.
+              </p>
+            </div>
+          )}
+          
           <textarea
             value={jsonText}
             onChange={(e) => setJsonText(e.target.value)}
@@ -572,7 +731,7 @@ export default function MindmapPage() {
       <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Mindmap</h1>
 
       {/* View type selector */}
-      <div className="flex items-center gap-2 sm:gap-4 mb-4 sm:mb-6 overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
         <Button
           variant={viewType === "list" ? "default" : "outline"}
           onClick={() => setViewType("list")}
@@ -587,6 +746,13 @@ export default function MindmapPage() {
         >
           Mindmap View
         </Button>
+        <Button
+          variant={viewType === "notes" ? "default" : "outline"}
+          onClick={() => setViewType("notes")}
+          className="whitespace-nowrap text-sm"
+        >
+          Notes View
+        </Button>
       </div>
 
       {viewType === "list" && (
@@ -596,6 +762,16 @@ export default function MindmapPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <Button onClick={() => setShowCreateModal(true)} className="text-sm">Create New Project</Button>
               <Button variant="outline" onClick={() => setShowImportModal(true)} className="text-sm">Import Projects</Button>
+              {projects.length > 0 && (
+                <Button 
+                  variant="destructive" 
+                  onClick={deleteAllProjects} 
+                  className="text-sm"
+                  title="Excluir todos os projetos"
+                >
+                  Delete All Projects
+                </Button>
+              )}
             </div>
           </div>
 
@@ -603,17 +779,59 @@ export default function MindmapPage() {
             {projects?.map((project) => (
               <div
                 key={project.id}
-                className="block p-3 sm:p-4 border rounded-lg hover:border-primary transition-colors"
+                className={`block p-3 sm:p-4 border rounded-lg hover:border-primary transition-colors relative ${
+                  project.is_archived ? 'opacity-60 bg-muted/30' : ''
+                }`}
               >
-                <Link href={`/admin/project/${project.id}`} className="block">
-                  <h3 className="font-medium mb-2 text-sm sm:text-base">{project.title}</h3>
+                {/* Pin/Archive status indicators */}
+                <div className="absolute top-2 left-2 flex gap-1">
+                  {project.is_pinned && (
+                    <div className="bg-primary text-primary-foreground rounded-full p-1">
+                      <Pin size={12} />
+                    </div>
+                  )}
+                  {project.is_archived && (
+                    <div className="bg-muted text-muted-foreground rounded-full p-1">
+                      <Archive size={12} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Action buttons */}
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => handleTogglePinned(project.id, e)}
+                    title={project.is_pinned ? "Desafixar" : "Fixar"}
+                  >
+                    {project.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={(e) => handleToggleArchived(project.id, e)}
+                    title={project.is_archived ? "Desarquivar" : "Arquivar"}
+                  >
+                    {project.is_archived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+                  </Button>
+                </div>
+
+                <Link href={`/admin/project/${project.id}`} className="block group">
+                  <h3 className={`font-medium mb-2 text-sm sm:text-base ${
+                    project.is_archived ? 'text-muted-foreground' : ''
+                  }`}>
+                    {project.title}
+                  </h3>
                   <div className="relative">
                     {project.description && (
-                      <div className="text-sm text-muted-foreground mb-2 group">
+                      <div className="text-sm text-muted-foreground mb-2 group/desc">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="absolute right-0 top-0 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6"
+                          className="absolute right-0 top-0 opacity-0 group-hover/desc:opacity-100 transition-opacity h-6 w-6"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -673,6 +891,10 @@ export default function MindmapPage() {
             <Controls />
           </ReactFlow>
         </div>
+      )}
+
+      {viewType === "notes" && (
+        <NotesView className="mt-4" />
       )}
 
       {/* Modals */}

@@ -5,12 +5,15 @@ import {
   MindmapEdge,
   MindmapData,
   MindmapNodeProjectWithNode,
+  NoteWithProject,
 } from "@/types/mindmap";
 import { Node, Edge } from "reactflow";
 
 export async function createMindmapProject(
   title: string,
-  description?: string
+  description?: string,
+  is_pinned?: boolean,
+  is_archived?: boolean
 ): Promise<MindmapProject> {
   const supabase = createClientComponentClient();
   const { data: { session } } = await supabase.auth.getSession();
@@ -21,7 +24,13 @@ export async function createMindmapProject(
 
   const { data, error } = await supabase
     .from("mindmap_projects")
-    .insert([{ title, description, user_id: session.user.id }])
+    .insert([{ 
+      title, 
+      description, 
+      user_id: session.user.id,
+      is_pinned: is_pinned || false,
+      is_archived: is_archived || false
+    }])
     .select()
     .single();
 
@@ -57,7 +66,12 @@ export async function getMindmapProject(id: string, cacheBust?: string): Promise
         style,
         mindmap_nodes:node_id (
           id,
-          content
+          content,
+          is_pinned,
+          is_archived,
+          priority,
+          workflow_status,
+          due_date
         )
       `)
       .eq("project_id", id) as { data: MindmapNodeProjectWithNode[] | null, error: any };
@@ -79,6 +93,11 @@ export async function getMindmapProject(id: string, cacheBust?: string): Promise
       position: { x: np.position_x, y: np.position_y },
       style: np.style || {},
       project_id: id,
+      is_pinned: np.mindmap_nodes.is_pinned || false,
+      is_archived: np.mindmap_nodes.is_archived || false,
+      priority: np.mindmap_nodes.priority || null,
+      workflow_status: np.mindmap_nodes.workflow_status || null,
+      due_date: np.mindmap_nodes.due_date || null,
     })) || [];
 
     return {
@@ -128,6 +147,11 @@ export async function updateMindmapNodes({
       .upsert({
         id: node.id,
         content: node.data.content || '',
+        is_pinned: node.data.isPinned || node.data.is_pinned || false,
+        is_archived: node.data.isArchived || node.data.is_archived || false,
+        priority: node.data.priority || null,
+        workflow_status: node.data.workflowStatus || node.data.workflow_status || null,
+        due_date: node.data.dueDate || node.data.due_date || null,
       }, {
         onConflict: 'id'
       });
@@ -608,14 +632,73 @@ export async function deleteMindmapProject(projectId: string): Promise<void> {
   }
 }
 
+export async function deleteAllMindmapProjects(): Promise<number> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  try {
+    // First get the count of projects to be deleted
+    const { data: projects, error: countError } = await supabase
+      .from("mindmap_projects")
+      .select("id")
+      .eq("user_id", session.user.id);
+
+    if (countError) throw countError;
+
+    const projectCount = projects?.length || 0;
+
+    if (projectCount === 0) {
+      return 0;
+    }
+
+    // Delete all projects for the current user (this will cascade delete all node-project relationships)
+    const { error: deleteError } = await supabase
+      .from("mindmap_projects")
+      .delete()
+      .eq("user_id", session.user.id);
+
+    if (deleteError) throw deleteError;
+
+    // Clean up orphaned nodes
+    const { data: deletedNodes, error: cleanupError } = await supabase
+      .rpc('cleanup_orphaned_nodes');
+
+    if (cleanupError) {
+      console.error('Error cleaning up orphaned nodes:', cleanupError);
+      // We don't throw here because the projects were already deleted successfully
+    } else {
+      console.log(`Cleaned up ${deletedNodes?.length || 0} orphaned nodes`);
+    }
+
+    return projectCount;
+  } catch (error) {
+    console.error('Error deleting all projects:', error);
+    throw error;
+  }
+}
+
 export async function getMindmapProjects(): Promise<MindmapProject[]> {
   const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
   const { data, error } = await supabase
     .from("mindmap_projects")
-    .select("*");
+    .select("*")
+    .eq("user_id", session.user.id)
+    .order("is_pinned", { ascending: false })
+    .order("is_archived", { ascending: true })
+    .order("updated_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+  return data || [];
 }
 
 // ===================== PROJECT OVERVIEW (USER-LEVEL) =====================
@@ -726,7 +809,7 @@ export async function deleteProjectOverviewEdge(edgeId: string): Promise<void> {
   if (error) throw error;
 }
 
-// ===================== IMPORTER UTILS =====================
+// ===================== IMAGE PROCESSING FOR IMPORTS =====================
 
 /**
  * Import an array of projects (with their nodes and edges) in one go.
@@ -755,10 +838,17 @@ export async function deleteProjectOverviewEdge(edgeId: string): Promise<void> {
 export interface RawImportProject {
   title: string;
   description?: string;
+  is_pinned?: boolean;
+  is_archived?: boolean;
   nodes: {
     content: string;
     position: { x: number; y: number };
     style?: any;
+    is_pinned?: boolean;
+    is_archived?: boolean;
+    priority?: 'low' | 'medium' | 'high';
+    workflow_status?: 'todo' | 'in_progress' | 'done' | 'blocked';
+    due_date?: string;
   }[];
   edges: {
     source: number | string;
@@ -766,10 +856,266 @@ export interface RawImportProject {
   }[];
 }
 
+/**
+ * Process markdown content and upload any referenced images
+ * Replaces local image references with Supabase Storage URLs
+ */
+export async function processImagesInContent(content: string, userId: string = 'import'): Promise<string> {
+  const supabase = createClientComponentClient();
+  
+  // Regex to find markdown image references
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  let processedContent = content;
+  const matches = Array.from(content.matchAll(imageRegex));
+  
+  for (const match of matches) {
+    const fullMatch = match[0];
+    const altText = match[1];
+    const imagePath = match[2];
+    
+    // Skip if it's already a URL (http/https)
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      continue;
+    }
+    
+    // Skip if it's already a Supabase URL
+    if (imagePath.includes('supabase')) {
+      continue;
+    }
+    
+    try {
+      // For local file references, we'll need to handle them differently
+      // For now, we'll create placeholder URLs
+      console.log(`⚠️ Local image reference found: ${imagePath}`);
+      console.log(`Consider uploading this image manually or via the upload script`);
+      
+      // You could extend this to:
+      // 1. Check if file exists locally
+      // 2. Upload to Supabase Storage
+      // 3. Replace with new URL
+      
+    } catch (error) {
+      console.error(`Failed to process image: ${imagePath}`, error);
+    }
+  }
+  
+  return processedContent;
+}
+
+/**
+ * Enhanced import function that processes images in content
+ */
+export async function importMindmapProjectsWithImages(rawProjects: RawImportProject[]) {
+  const { data: { session } } = await createClientComponentClient().auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+  
+  for (const raw of rawProjects) {
+    // 1. Create project first
+    const project = await createMindmapProject(raw.title, raw.description, raw.is_pinned, raw.is_archived);
+
+    // 2. Process images in project description
+    const processedDescription = await processImagesInContent(raw.description || '', session.user.id);
+    if (processedDescription !== raw.description) {
+      // Update project with processed description
+      const supabase = createClientComponentClient();
+      await supabase
+        .from("mindmap_projects")
+        .update({ description: processedDescription })
+        .eq("id", project.id);
+    }
+
+    // 3. Convert raw nodes -> RF Nodes with processed images
+    const idxToId = new Map<number, string>();
+    const rfNodes: Node[] = await Promise.all(
+      raw.nodes.map(async (n: RawImportProject['nodes'][0], idx: number) => {
+        const newId = crypto.randomUUID();
+        idxToId.set(idx, newId);
+        
+        // Process images in node content
+        const processedContent = await processImagesInContent(n.content, session.user.id);
+        
+        return {
+          id: newId,
+          position: n.position,
+          data: {
+            content: processedContent,
+            style: n.style || {
+              backgroundColor: "#ffffff",
+              borderColor: "#000000",
+              borderWidth: 2,
+              fontSize: 14,
+            },
+            is_pinned: n.is_pinned || false,
+            is_archived: n.is_archived || false,
+            priority: n.priority || null,
+            workflow_status: n.workflow_status || null,
+            due_date: n.due_date || null,
+          },
+        } as unknown as Node;
+      })
+    );
+
+    // 4. Insert nodes
+    await updateMindmapNodes({ projectId: project.id, nodes: rfNodes });
+
+    // 5. Map raw edges using idx mapping
+    const rfEdges: Edge[] = raw.edges.map((e: RawImportProject['edges'][0]) => {
+      const sourceId = idxToId.get(typeof e.source === "string" ? parseInt(e.source) : (e.source as number));
+      const targetId = idxToId.get(typeof e.target === "string" ? parseInt(e.target) : (e.target as number));
+      if (!sourceId || !targetId) {
+        throw new Error(`Edge references missing node. Source: ${e.source}, Target: ${e.target}`);
+      }
+      return {
+        id: crypto.randomUUID(),
+        source: sourceId,
+        target: targetId,
+        type: "default",
+      } as unknown as Edge;
+    });
+
+    // 6. Insert edges
+    await updateMindmapEdges(project.id, rfEdges);
+  }
+}
+
+/**
+ * Apply image URL mapping to update local image references with Supabase URLs
+ * This is useful after running the upload-keep-images.js script
+ */
+export async function applyImageUrlMapping(urlMapping: Record<string, string>) {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  let updatedNodes = 0;
+  let updatedProjects = 0;
+
+  try {
+    // Get all projects and nodes for the current user
+    const { data: projects, error: projectsError } = await supabase
+      .from("mindmap_projects")
+      .select("id, description")
+      .eq("user_id", session.user.id);
+
+    if (projectsError) throw projectsError;
+
+    const { data: nodes, error: nodesError } = await supabase
+      .from("mindmap_nodes")
+      .select("id, content");
+
+    if (nodesError) throw nodesError;
+
+    // Update project descriptions
+    for (const project of projects || []) {
+      if (project.description) {
+        let updatedDescription = project.description;
+        let hasUpdates = false;
+
+        // Replace all mapped URLs in description
+        Object.entries(urlMapping).forEach(([localPath, supabaseUrl]) => {
+          const patterns = [
+            `(./images/${localPath})`,
+            `(./${localPath})`,
+            `(${localPath})`,
+            `(./references/Keep/${localPath})`
+          ];
+
+          patterns.forEach(pattern => {
+            if (updatedDescription.includes(pattern)) {
+              updatedDescription = updatedDescription.replace(new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `(${supabaseUrl})`);
+              hasUpdates = true;
+            }
+          });
+        });
+
+        if (hasUpdates) {
+          const { error } = await supabase
+            .from("mindmap_projects")
+            .update({ description: updatedDescription })
+            .eq("id", project.id);
+
+          if (error) {
+            console.error(`Failed to update project ${project.id}:`, error);
+          } else {
+            updatedProjects++;
+            console.log(`✅ Updated project: ${project.id}`);
+          }
+        }
+      }
+    }
+
+    // Update node contents
+    for (const node of nodes || []) {
+      if (node.content) {
+        let updatedContent = node.content;
+        let hasUpdates = false;
+
+        // Replace all mapped URLs in content
+        Object.entries(urlMapping).forEach(([localPath, supabaseUrl]) => {
+          const patterns = [
+            `(./images/${localPath})`,
+            `(./${localPath})`,
+            `(${localPath})`,
+            `(./references/Keep/${localPath})`
+          ];
+
+          patterns.forEach(pattern => {
+            if (updatedContent.includes(pattern)) {
+              updatedContent = updatedContent.replace(new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `(${supabaseUrl})`);
+              hasUpdates = true;
+            }
+          });
+        });
+
+        if (hasUpdates) {
+          const { error } = await supabase
+            .from("mindmap_nodes")
+            .update({ content: updatedContent })
+            .eq("id", node.id);
+
+          if (error) {
+            console.error(`Failed to update node ${node.id}:`, error);
+          } else {
+            updatedNodes++;
+            console.log(`✅ Updated node: ${node.id}`);
+          }
+        }
+      }
+    }
+
+    console.log(`\n📊 Image URL Mapping Applied:`);
+    console.log(`- ✅ Updated Projects: ${updatedProjects}`);
+    console.log(`- ✅ Updated Nodes: ${updatedNodes}`);
+    console.log(`- 📋 Total URL Mappings: ${Object.keys(urlMapping).length}`);
+
+    return {
+      success: true,
+      updatedProjects,
+      updatedNodes,
+      totalMappings: Object.keys(urlMapping).length
+    };
+
+  } catch (error) {
+    console.error('Error applying image URL mapping:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      updatedProjects,
+      updatedNodes
+    };
+  }
+}
+
 export async function importMindmapProjects(rawProjects: RawImportProject[]) {
   for (const raw of rawProjects) {
     // 1. Create project first
-    const project = await createMindmapProject(raw.title, raw.description);
+    const project = await createMindmapProject(raw.title, raw.description, raw.is_pinned, raw.is_archived);
 
     // 2. Convert raw nodes -> RF Nodes with new ids
     const idxToId = new Map<number, string>();
@@ -787,6 +1133,11 @@ export async function importMindmapProjects(rawProjects: RawImportProject[]) {
             borderWidth: 2,
             fontSize: 14,
           },
+          is_pinned: n.is_pinned || false,
+          is_archived: n.is_archived || false,
+          priority: n.priority || null,
+          workflow_status: n.workflow_status || null,
+          due_date: n.due_date || null,
         },
       } as unknown as Node;
     });
@@ -812,4 +1163,315 @@ export async function importMindmapProjects(rawProjects: RawImportProject[]) {
     // 5. Insert edges
     await updateMindmapEdges(project.id, rfEdges);
   }
+}
+
+// Toggle project pinned status
+export async function toggleProjectPinned(projectId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // First get current state
+  const { data: project, error: getError } = await supabase
+    .from("mindmap_projects")
+    .select("is_pinned")
+    .eq("id", projectId)
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (getError) throw getError;
+
+  // Toggle the pinned state
+  const { error } = await supabase
+    .from("mindmap_projects")
+    .update({ is_pinned: !project.is_pinned })
+    .eq("id", projectId)
+    .eq("user_id", session.user.id);
+
+  if (error) throw error;
+}
+
+// Toggle project archived status
+export async function toggleProjectArchived(projectId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // First get current state
+  const { data: project, error: getError } = await supabase
+    .from("mindmap_projects")
+    .select("is_archived")
+    .eq("id", projectId)
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (getError) throw getError;
+
+  // Toggle the archived state
+  const { error } = await supabase
+    .from("mindmap_projects")
+    .update({ is_archived: !project.is_archived })
+    .eq("id", projectId)
+    .eq("user_id", session.user.id);
+
+  if (error) throw error;
+}
+
+// Toggle node pinned status
+export async function toggleNodePinned(nodeId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // First get current state
+  const { data: node, error: getError } = await supabase
+    .from("mindmap_nodes")
+    .select("is_pinned")
+    .eq("id", nodeId)
+    .single();
+
+  if (getError) throw getError;
+
+  // Toggle the pinned state
+  const { error } = await supabase
+    .from("mindmap_nodes")
+    .update({ is_pinned: !node.is_pinned })
+    .eq("id", nodeId);
+
+  if (error) throw error;
+}
+
+// Toggle node archived status
+export async function toggleNodeArchived(nodeId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // First get current state
+  const { data: node, error: getError } = await supabase
+    .from("mindmap_nodes")
+    .select("is_archived")
+    .eq("id", nodeId)
+    .single();
+
+  if (getError) throw getError;
+
+  // Toggle the archived state
+  const { error } = await supabase
+    .from("mindmap_nodes")
+    .update({ is_archived: !node.is_archived })
+    .eq("id", nodeId);
+
+  if (error) throw error;
+}
+
+// ===================== NOTES VIEW =====================
+
+export async function getAllNotes(searchQuery?: string): Promise<NoteWithProject[]> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // Get all notes with project information
+  const { data, error } = await supabase
+    .from("mindmap_nodes")
+    .select(`
+      id,
+      content,
+      is_pinned,
+      is_archived,
+      priority,
+      workflow_status,
+      due_date,
+      updated_at,
+      created_at,
+      mindmap_node_projects!inner (
+        project_id,
+        position_x,
+        position_y,
+        mindmap_projects!inner (
+          id,
+          title,
+          is_pinned,
+          is_archived,
+          user_id
+        )
+      )
+    `)
+    .eq("mindmap_node_projects.mindmap_projects.user_id", session.user.id);
+
+  if (error) throw error;
+
+  // Transform the data to flatten the structure
+  const notes: NoteWithProject[] = [];
+  
+  if (data) {
+    for (const node of data as any[]) {
+      for (const nodeProject of node.mindmap_node_projects) {
+        const project = nodeProject.mindmap_projects;
+        
+        const note: NoteWithProject = {
+          id: node.id,
+          content: node.content,
+          position: { x: nodeProject.position_x, y: nodeProject.position_y },
+          style: {},
+          project_id: project.id,
+          project_title: project.title,
+          project_is_archived: project.is_archived,
+          project_is_pinned: project.is_pinned,
+          is_pinned: node.is_pinned || false,
+          is_archived: node.is_archived || false,
+          priority: node.priority || null,
+          workflow_status: node.workflow_status || null,
+          due_date: node.due_date || null,
+          created_at: node.created_at,
+          updated_at: node.updated_at,
+        };
+        
+        // Apply search filter if provided
+        if (searchQuery) {
+          const query = searchQuery.toLowerCase();
+          const matchesContent = note.content.toLowerCase().includes(query);
+          const matchesProject = note.project_title.toLowerCase().includes(query);
+          
+          if (matchesContent || matchesProject) {
+            notes.push(note);
+          }
+        } else {
+          notes.push(note);
+        }
+      }
+    }
+  }
+
+  // Sort notes by pinned, archived, then by date
+  return notes.sort((a, b) => {
+    // First by pinned status (pinned first)
+    if (a.is_pinned !== b.is_pinned) {
+      return a.is_pinned ? -1 : 1;
+    }
+    
+    // Then by archived status (non-archived first)
+    if (a.is_archived !== b.is_archived) {
+      return a.is_archived ? 1 : -1;
+    }
+    
+    // Finally by updated date (most recent first)
+    return new Date(b.updated_at || '').getTime() - new Date(a.updated_at || '').getTime();
+  });
+}
+
+// Update note content
+export async function updateNoteContent(nodeId: string, content: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { error } = await supabase
+    .from("mindmap_nodes")
+    .update({ 
+      content,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", nodeId);
+
+  if (error) throw error;
+}
+
+// Move note to a different project
+export async function moveNoteToProject(nodeId: string, currentProjectId: string, newProjectId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  // Check if the new project exists and belongs to the user
+  const { data: newProject, error: projectError } = await supabase
+    .from("mindmap_projects")
+    .select("id")
+    .eq("id", newProjectId)
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (projectError || !newProject) {
+    throw new Error("Project not found or access denied");
+  }
+
+  // Get current position in old project
+  const { data: currentNodeProject, error: currentError } = await supabase
+    .from("mindmap_node_projects")
+    .select("position_x, position_y, style")
+    .eq("node_id", nodeId)
+    .eq("project_id", currentProjectId)
+    .single();
+
+  if (currentError) throw currentError;
+
+  // Remove from old project
+  const { error: deleteError } = await supabase
+    .from("mindmap_node_projects")
+    .delete()
+    .eq("node_id", nodeId)
+    .eq("project_id", currentProjectId);
+
+  if (deleteError) throw deleteError;
+
+  // Add to new project with same position or default position
+  const { error: insertError } = await supabase
+    .from("mindmap_node_projects")
+    .insert({
+      node_id: nodeId,
+      project_id: newProjectId,
+      position_x: currentNodeProject?.position_x || 100,
+      position_y: currentNodeProject?.position_y || 100,
+      style: currentNodeProject?.style || {}
+    });
+
+  if (insertError) throw insertError;
+}
+
+// Get available projects for moving notes
+export async function getAvailableProjectsForNote(excludeProjectId?: string): Promise<MindmapProject[]> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  let query = supabase
+    .from("mindmap_projects")
+    .select("*")
+    .eq("user_id", session.user.id)
+    .order("is_pinned", { ascending: false })
+    .order("title");
+
+  if (excludeProjectId) {
+    query = query.neq("id", excludeProjectId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
 }

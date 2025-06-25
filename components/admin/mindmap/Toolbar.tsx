@@ -53,11 +53,11 @@ export function Toolbar({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row gap-2 bg-white p-2 sm:p-3 rounded-md shadow-md text-gray-900 min-w-0">
+    <div className="flex flex-col sm:flex-row gap-2 bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-md shadow-md text-gray-900 dark:text-gray-100 min-w-0 border border-gray-200 dark:border-gray-700">
       {/* Toggle collapse button - show on all screen sizes */}
       <button
         onClick={() => setCollapsed((prev) => !prev)}
-        className="self-end text-gray-700 hover:text-gray-900 p-1"
+        className="self-end text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1"
         title={collapsed ? "Expand toolbar" : "Collapse toolbar"}
       >
         {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
@@ -104,11 +104,11 @@ export function Toolbar({
 
       {/* Node style controls */}
       {!collapsed && selectedNode && (
-        <div className="mt-2 sm:mt-4 p-2 sm:p-3 border rounded min-w-0 w-full sm:w-auto">
-          <h3 className="text-xs sm:text-sm font-medium mb-2 text-gray-900">Node Style</h3>
+        <div className="mt-2 sm:mt-4 p-2 sm:p-3 border border-gray-200 dark:border-gray-600 rounded min-w-0 w-full sm:w-auto bg-gray-50 dark:bg-gray-700">
+          <h3 className="text-xs sm:text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Node Style</h3>
           <div className="space-y-2">
             <div>
-              <label className="text-xs block text-gray-900">Background Color</label>
+              <label className="text-xs block text-gray-900 dark:text-gray-200">Background Color</label>
               <input
                 type="color"
                 value={nodeStyle.backgroundColor || defaultStyle.backgroundColor}
@@ -118,11 +118,11 @@ export function Toolbar({
                     backgroundColor: e.target.value,
                   })
                 }
-                className="w-full h-8 sm:h-6 rounded"
+                className="w-full h-8 sm:h-6 rounded border border-gray-300 dark:border-gray-600"
               />
             </div>
             <div>
-              <label className="text-xs block text-gray-900">Border Color</label>
+              <label className="text-xs block text-gray-900 dark:text-gray-200">Border Color</label>
               <input
                 type="color"
                 value={nodeStyle.borderColor || defaultStyle.borderColor}
@@ -132,11 +132,11 @@ export function Toolbar({
                     borderColor: e.target.value,
                   })
                 }
-                className="w-full h-8 sm:h-6 rounded"
+                className="w-full h-8 sm:h-6 rounded border border-gray-300 dark:border-gray-600"
               />
             </div>
             <div>
-              <label className="text-xs block text-gray-900">Font Size</label>
+              <label className="text-xs block text-gray-900 dark:text-gray-200">Font Size</label>
               <input
                 type="number"
                 value={nodeStyle.fontSize || defaultStyle.fontSize}
@@ -146,7 +146,7 @@ export function Toolbar({
                     fontSize: parseInt(e.target.value),
                   })
                 }
-                className="w-full px-2 py-2 sm:py-1 text-xs sm:text-sm border rounded text-gray-900"
+                className="w-full px-2 py-2 sm:py-1 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                 min="8"
                 max="32"
               />

@@ -103,8 +103,8 @@ export function ImportNodesModal({ isOpen, onClose, onImport }: ImportNodesModal
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Import Mindmap</h2>
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl border border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Import Mindmap</h2>
         
         <div className="space-y-4">
           <div>
@@ -115,7 +115,7 @@ export function ImportNodesModal({ isOpen, onClose, onImport }: ImportNodesModal
               type="file"
               accept=".json"
               onChange={handleFileUpload}
-              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              className="block w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 dark:file:bg-blue-900/20 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/30"
             />
           </div>
 
@@ -164,7 +164,7 @@ export function ImportNodesModal({ isOpen, onClose, onImport }: ImportNodesModal
           <div className="flex justify-end space-x-3 mt-4">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               Cancel
             </button>

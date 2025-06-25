@@ -32,6 +32,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowExpand, setShouldShowExpand] = useState(false);
   const [projects, setProjects] = useState<{ project_id: string; project_title: string }[]>([]);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pathname = usePathname();
@@ -68,8 +69,56 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     }
   }, [data.style, isEditing]);
 
-  const handleDoubleClick = () => {
+  // Listen for custom edit events from ReactFlow
+  useEffect(() => {
+    const handleEditEvent = (event: any) => {
+      if (event.detail.nodeId === id) {
+        console.log('[NODE] Custom edit event received for node:', id);
+        setIsEditing(true);
+      }
+    };
+
+    const nodeElement = document.querySelector(`[data-id="${id}"]`);
+    if (nodeElement) {
+      nodeElement.addEventListener('triggerEdit', handleEditEvent);
+      return () => {
+        nodeElement.removeEventListener('triggerEdit', handleEditEvent);
+      };
+    }
+  }, [id]);
+
+  // Double click detection with proper timing
+  const lastClickTime = useRef(0);
+
+  const handleClick = (event: React.MouseEvent) => {
+    console.log('Node click handler called for node:', id);
+    event.stopPropagation();
+    
+    const now = Date.now();
+    const timeDiff = now - lastClickTime.current;
+    
+    // If clicks are within double-click threshold (300ms), treat as double-click
+    if (timeDiff < 300 && timeDiff > 0) {
+      console.log('Manual double click detected on node:', id);
+      setIsEditing(true);
+      lastClickTime.current = 0; // Reset to prevent triple-click
+    } else {
+      lastClickTime.current = now;
+      console.log('Single click on node:', id);
+    }
+  };
+
+  const handleDoubleClick = (event: React.MouseEvent) => {
+    console.log('Native double click handler called for node:', id);
+    event.stopPropagation();
+    event.preventDefault();
+    
     setIsEditing(true);
+  };
+
+  const handleMouseDown = (event: React.MouseEvent) => {
+    console.log('Mouse down on node:', id);
+    event.stopPropagation();
   };
 
   const handleBlur = () => {
@@ -88,7 +137,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   return (
     <div
       className={cn(
-        "px-4 py-2 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200",
+        "px-4 py-2 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200 nopan",
         isExpanded ? "w-[600px]" : "w-[200px]",
         !isExpanded && !isEditing && "max-h-[160px] overflow-hidden"
       )}
@@ -98,7 +147,9 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         borderWidth: data.style?.borderWidth || 2,
         fontSize: data.style?.fontSize || 14,
       }}
+      onClick={handleClick}
       onDoubleClick={handleDoubleClick}
+      onMouseDown={handleMouseDown}
     >
       <Handle
         type="target"
@@ -233,3 +284,4 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
 });
 
 MindmapNode.displayName = "MindmapNode";
+

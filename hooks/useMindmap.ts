@@ -18,7 +18,7 @@ import {
   deleteMindmapEdge,
   createProjectNode,
 } from "@/lib/mindmap";
-import { MindmapNode, MindmapEdge } from "@/types/mindmap";
+import { MindmapNode, MindmapEdge, Priority, WorkflowStatus } from "@/types/mindmap";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 function convertToReactFlowNode(node: MindmapNode): Node {
@@ -29,6 +29,11 @@ function convertToReactFlowNode(node: MindmapNode): Node {
     data: {
       content: node.content,
       style: node.style || {},
+      isPinned: node.is_pinned || false,
+      isArchived: node.is_archived || false,
+      priority: node.priority || null,
+      workflowStatus: node.workflow_status || null,
+      dueDate: node.due_date || null,
       onChange: (newText: string) => {
         // This will be set by the hook
         return newText;
@@ -65,6 +70,10 @@ export function useMindmap(projectId: string) {
   const pendingOperations = useRef(new Set<string>());
   // Prevent ReactFlow from overriding our node additions
   const addingNodeProtection = useRef<boolean>(false);
+  // Debounce saves for position changes during drag
+  const positionSaveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // Track click times for double-click detection through position changes
+  const lastClickTimes = useRef<Map<string, number>>(new Map());
 
   const getMindmapTitle = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -78,21 +87,60 @@ export function useMindmap(projectId: string) {
   // Handle text changes
   const handleTextChange = useCallback((nodeId: string, newText: string) => {
     console.log(`[HOOK] handleTextChange chamado para node ${nodeId}:`, newText);
-    setNodes((nds) =>
-      nds.map((node) => {
+    
+    // Update local state first (synchronously)
+    let updatedNode: Node | null = null;
+    console.log(`[HOOK] Atualizando estado local...`);
+    setNodes((nds) => {
+      console.log(`[HOOK] setNodes callback executado, nds.length:`, nds.length);
+      return nds.map((node) => {
         if (node.id === nodeId) {
-          return {
+          console.log(`[HOOK] Node encontrado para update:`, node.id);
+          updatedNode = {
             ...node,
             data: {
               ...node.data,
               content: newText,
             },
           };
+          console.log(`[HOOK] updatedNode criado:`, updatedNode);
+          return updatedNode;
         }
         return node;
-      })
-    );
-  }, []);
+      });
+    });
+
+    // Save to database asynchronously in background
+    console.log(`[HOOK] Verificando se updatedNode foi criado:`, !!updatedNode);
+    if (updatedNode) {
+      console.log(`[HOOK] 💾 Salvando mudança de texto para node ${nodeId}:`, newText);
+      console.log(`[HOOK] Chamando updateMindmapNodes com projectId:`, projectId);
+      
+      // Save in background without blocking UI
+      (async () => {
+        try {
+          console.log(`[HOOK] Verificando sessão...`);
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            console.error(`[HOOK] ❌ Sessão não encontrada`);
+            throw new Error("Not authenticated");
+          }
+          console.log(`[HOOK] ✅ Sessão válida encontrada`);
+
+          await updateMindmapNodes({
+            projectId,
+            nodes: [updatedNode!],
+          });
+          console.log(`[HOOK] ✅ Texto salvo no banco com sucesso para node ${nodeId}`);
+        } catch (err) {
+          console.error('Error saving text change:', err);
+          setError(err instanceof Error ? err : new Error("Failed to save text"));
+        }
+      })();
+    } else {
+      console.error(`[HOOK] ❌ updatedNode é null, não salvando`);
+    }
+  }, [projectId, supabase]);
 
   // Load initial data
   useEffect(() => {
@@ -108,30 +156,15 @@ export function useMindmap(projectId: string) {
         console.log(`[LOAD] Nodes encontrados: ${data.nodes?.length || 0}`);
         console.log(`[LOAD] Edges encontradas: ${data.edges?.length || 0}`);
         
-        // Create handleTextChange function locally to avoid dependency issues
-        const localHandleTextChange = (nodeId: string, newText: string) => {
-          console.log(`[HOOK] handleTextChange chamado para node ${nodeId}:`, newText);
-          setNodes((nds) =>
-            nds.map((node) => {
-              if (node.id === nodeId) {
-                return {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    content: newText,
-                  },
-                };
-              }
-              return node;
-            })
-          );
-        };
-        
+        // Use the main handleTextChange function that saves to database
         const initialNodes = data.nodes.map((node: any) => ({
           ...convertToReactFlowNode(node),
           data: {
             ...convertToReactFlowNode(node).data,
-            onChange: (newText: string) => localHandleTextChange(node.id, newText),
+            onChange: (newText: string) => {
+              console.log(`[LOAD] onChange triggered for node ${node.id} with text:`, newText);
+              handleTextChange(node.id, newText);
+            },
           },
         }));
         
@@ -151,7 +184,7 @@ export function useMindmap(projectId: string) {
     }
     loadMindmap();
     return () => { isMounted = false; };
-  }, [projectId]); // Remove handleTextChange from dependencies
+  }, [projectId, handleTextChange]);
 
   // CRUD Operations using standard React state management
 
@@ -184,6 +217,11 @@ export function useMindmap(projectId: string) {
             borderWidth: 2,
             fontSize: 14,
           },
+          priority: nodeData.data?.priority || null,
+          workflowStatus: nodeData.data?.workflowStatus || null,
+          dueDate: nodeData.data?.dueDate || null,
+          isPinned: nodeData.data?.isPinned || false,
+          isArchived: nodeData.data?.isArchived || false,
           onChange: (newText: string) => {
             console.log(`[NODE] onChange called for node ${nodeId} with text:`, newText);
             handleTextChange(nodeId, newText);
@@ -282,6 +320,11 @@ export function useMindmap(projectId: string) {
       content?: string;
       position?: { x: number; y: number };
       style?: any;
+      priority?: Priority;
+      workflowStatus?: WorkflowStatus;
+      dueDate?: string | null;
+      isPinned?: boolean;
+      isArchived?: boolean;
     }
   ) => {
     try {
@@ -303,6 +346,11 @@ export function useMindmap(projectId: string) {
           ...currentNode.data,
           ...(updates.content !== undefined ? { content: updates.content } : {}),
           ...(updates.style ? { style: { ...currentNode.data.style, ...updates.style } } : {}),
+          ...(updates.priority !== undefined ? { priority: updates.priority } : {}),
+          ...(updates.workflowStatus !== undefined ? { workflowStatus: updates.workflowStatus } : {}),
+          ...(updates.dueDate !== undefined ? { dueDate: updates.dueDate } : {}),
+          ...(updates.isPinned !== undefined ? { isPinned: updates.isPinned } : {}),
+          ...(updates.isArchived !== undefined ? { isArchived: updates.isArchived } : {}),
         },
       };
 
@@ -334,53 +382,107 @@ export function useMindmap(projectId: string) {
       return;
     }
     
-    // Additional protection: ignore dimension changes that would reduce node count
-    const dimensionChanges = changes.filter(change => change.type === 'dimensions');
-    if (dimensionChanges.length === changes.length && dimensionChanges.length > 0) {
-      // This is only dimension changes - check if it would reduce our node count
+    // Separate position changes from other changes
+    const positionChanges = changes.filter(change => change.type === 'position');
+    const otherChanges = changes.filter(change => change.type !== 'position');
+    
+    // Handle position changes with debounce (no immediate save)
+    if (positionChanges.length > 0) {
+      console.log(`[HOOK-${timestamp}] Aplicando mudanças de posição (sem salvar):`, positionChanges);
       setNodes((currentNodes) => {
-        const updatedNodes = applyNodeChanges(changes, currentNodes);
-        if (updatedNodes.length < currentNodes.length) {
-          console.log(`[HOOK-${timestamp}] ⚠️ IGNORANDO mudanças de dimensão que reduziriam nodes: ${currentNodes.length} → ${updatedNodes.length}`);
-          return currentNodes; // Keep current state
-        }
-        console.log(`[HOOK-${timestamp}] ✅ Aplicando mudanças de dimensão: ${currentNodes.length} → ${updatedNodes.length} nodes`);
+        const updatedNodes = applyNodeChanges(positionChanges, currentNodes);
+        
+        // Set up debounced save for each position change
+        positionChanges.forEach(change => {
+          if (change.type === 'position' && change.position) {
+            const nodeId = change.id;
+            const now = Date.now();
+            
+            // Just track timing for future use, but don't trigger edit through position changes
+            lastClickTimes.current.set(nodeId, now);
+            
+            // Clear existing timeout for this node
+            const existingTimeout = positionSaveTimeouts.current.get(nodeId);
+            if (existingTimeout) {
+              clearTimeout(existingTimeout);
+            }
+            
+            // Set new timeout for debounced save
+            const timeout = setTimeout(() => {
+              console.log(`[HOOK] 💾 Salvando posição do node ${nodeId} após debounce:`, change.position);
+              updateNode(nodeId, { position: change.position! }).catch((err) => {
+                console.error('Error saving position:', err);
+              });
+              positionSaveTimeouts.current.delete(nodeId);
+            }, 800); // 800ms debounce
+            
+            positionSaveTimeouts.current.set(nodeId, timeout);
+          }
+        });
+        
         return updatedNodes;
       });
-      return;
     }
     
-    // Handle deletion changes
-    const deletionChanges = changes.filter(change => change.type === 'remove');
-    deletionChanges.forEach(change => {
-      console.log(`[HOOK-${timestamp}] Processando remoção de node: ${change.id}`);
-      removeNode(change.id);
-    });
-
-    // Apply other changes using ReactFlow's built-in logic
-    const otherChanges = changes.filter(change => change.type !== 'remove');
+    // Handle non-position changes normally
     if (otherChanges.length > 0) {
-      console.log(`[HOOK-${timestamp}] Aplicando mudanças nativas do ReactFlow:`, otherChanges);
-      
-      // Use setNodes with callback to get fresh state
-      setNodes((currentNodes) => {
-        console.log(`[HOOK-${timestamp}] Estado atual no callback: ${currentNodes.length} nodes`);
-        
-        // Apply changes to current nodes
-        const updatedNodes = applyNodeChanges(otherChanges, currentNodes);
-        
-        // IMPORTANT: Only apply if the change doesn't reduce node count unexpectedly
-        if (updatedNodes.length >= currentNodes.length || deletionChanges.length > 0) {
-          console.log(`[HOOK-${timestamp}] ✅ Aplicando mudança válida: ${currentNodes.length} → ${updatedNodes.length} nodes`);
-          console.log(`[HOOK-${timestamp}] 🔄 setNodes retornando (ON NODES CHANGE)`);
+      // Additional protection: ignore dimension changes that would reduce node count
+      const dimensionChanges = otherChanges.filter(change => change.type === 'dimensions');
+      if (dimensionChanges.length === otherChanges.length && dimensionChanges.length > 0) {
+        // This is only dimension changes - check if it would reduce our node count
+        setNodes((currentNodes) => {
+          const updatedNodes = applyNodeChanges(otherChanges, currentNodes);
+          if (updatedNodes.length < currentNodes.length) {
+            console.log(`[HOOK-${timestamp}] ⚠️ IGNORANDO mudanças de dimensão que reduziriam nodes: ${currentNodes.length} → ${updatedNodes.length}`);
+            return currentNodes; // Keep current state
+          }
+          console.log(`[HOOK-${timestamp}] ✅ Aplicando mudanças de dimensão: ${currentNodes.length} → ${updatedNodes.length} nodes`);
           return updatedNodes;
-        } else {
-          console.log(`[HOOK-${timestamp}] ⚠️ IGNORANDO mudança suspeita: ${currentNodes.length} → ${updatedNodes.length} nodes sem deleções`);
-          return currentNodes; // Keep current state
+        });
+        return;
+      }
+      
+      // Handle deletion changes
+      const deletionChanges = otherChanges.filter(change => change.type === 'remove');
+      deletionChanges.forEach(change => {
+        console.log(`[HOOK-${timestamp}] Processando remoção de node: ${change.id}`);
+        
+        // Cancel any pending position save for deleted node
+        const existingTimeout = positionSaveTimeouts.current.get(change.id);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+          positionSaveTimeouts.current.delete(change.id);
+          console.log(`[HOOK-${timestamp}] ✅ Cancelado save de posição para node deletado: ${change.id}`);
         }
+        
+        removeNode(change.id);
       });
+
+      // Apply remaining changes using ReactFlow's built-in logic
+      const remainingChanges = otherChanges.filter(change => change.type !== 'remove');
+      if (remainingChanges.length > 0) {
+        console.log(`[HOOK-${timestamp}] Aplicando mudanças nativas do ReactFlow:`, remainingChanges);
+        
+        // Use setNodes with callback to get fresh state
+        setNodes((currentNodes) => {
+          console.log(`[HOOK-${timestamp}] Estado atual no callback: ${currentNodes.length} nodes`);
+          
+          // Apply changes to current nodes
+          const updatedNodes = applyNodeChanges(remainingChanges, currentNodes);
+          
+          // IMPORTANT: Only apply if the change doesn't reduce node count unexpectedly
+          if (updatedNodes.length >= currentNodes.length || deletionChanges.length > 0) {
+            console.log(`[HOOK-${timestamp}] ✅ Aplicando mudança válida: ${currentNodes.length} → ${updatedNodes.length} nodes`);
+            console.log(`[HOOK-${timestamp}] 🔄 setNodes retornando (ON NODES CHANGE)`);
+            return updatedNodes;
+          } else {
+            console.log(`[HOOK-${timestamp}] ⚠️ IGNORANDO mudança suspeita: ${currentNodes.length} → ${updatedNodes.length} nodes sem deleções`);
+            return currentNodes; // Keep current state
+          }
+        });
+      }
     }
-  }, [removeNode]); // Remove nodes from dependencies to avoid stale closures
+  }, [removeNode, updateNode]); // Remove nodes from dependencies to avoid stale closures
 
   // Enhanced onEdgesChange that handles deletions properly  
   const onEdgesChange = useCallback(async (changes: EdgeChange[]) => {

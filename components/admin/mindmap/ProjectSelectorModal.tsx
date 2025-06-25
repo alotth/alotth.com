@@ -112,14 +112,14 @@ export function ProjectSelectorModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] flex flex-col">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] flex flex-col border border-gray-200 dark:border-gray-700">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             {selectedProject ? `Select Node from ${selectedProject.title}` : "Select a Project"}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
           >
             ✕
           </button>
@@ -130,7 +130,7 @@ export function ProjectSelectorModal({
             <div className="mb-4">
               <button
                 onClick={handleBack}
-                className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
+                className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100 flex items-center gap-1"
               >
                 ← Back to Projects
               </button>
@@ -139,16 +139,16 @@ export function ProjectSelectorModal({
             <div className="flex-1 overflow-y-auto">
               {loadingNodes ? (
                 <div className="flex items-center justify-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-900"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-900 dark:border-gray-100"></div>
                 </div>
               ) : (
                 <div className="space-y-2">
                   <button
                     onClick={handleNewNode}
-                    className="w-full p-3 text-left border rounded-md hover:bg-gray-50 transition-colors bg-green-50 border-green-200"
+                    className="w-full p-3 text-left border rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
                   >
-                    <div className="font-medium">Create New Node</div>
-                    <div className="text-sm text-gray-500 mt-1">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">Create New Node</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                       Add a new node to this project
                     </div>
                   </button>
@@ -157,9 +157,9 @@ export function ProjectSelectorModal({
                     <button
                       key={node.id}
                       onClick={() => handleNodeSelect(node.id, node.content)}
-                      className="w-full p-3 text-left border rounded-md hover:bg-gray-50 transition-colors"
+                      className="w-full p-3 text-left border border-gray-200 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                     >
-                      <div className="font-medium">{node.content}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{node.content}</div>
                     </button>
                   ))}
                 </div>
@@ -174,17 +174,17 @@ export function ProjectSelectorModal({
                 placeholder="Search projects..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-3 py-2 border rounded-md"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
 
             <div className="flex-1 overflow-y-auto">
               {loading ? (
                 <div className="flex items-center justify-center h-32">
-                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-900"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-900 dark:border-gray-100"></div>
                 </div>
               ) : filteredProjects.length === 0 ? (
-                <div className="text-center text-gray-500 py-8">
+                <div className="text-center text-gray-500 dark:text-gray-400 py-8">
                   No projects found
                 </div>
               ) : (
@@ -193,11 +193,11 @@ export function ProjectSelectorModal({
                     <button
                       key={project.id}
                       onClick={() => handleProjectSelect(project)}
-                      className="w-full p-3 text-left border rounded-md hover:bg-gray-50 transition-colors"
+                      className="w-full p-3 text-left border border-gray-200 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                     >
-                      <div className="font-medium">{project.title}</div>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">{project.title}</div>
                       {project.description && (
-                        <div className="text-sm text-gray-500 mt-1">
+                        <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                           {project.description}
                         </div>
                       )}

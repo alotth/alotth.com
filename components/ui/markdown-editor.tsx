@@ -108,16 +108,16 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
 
       {/* Editor/Preview */}
       {showPreview ? (
-        <div className="border rounded-md p-3 min-h-[150px] bg-gray-50 dark:bg-gray-800 overflow-auto">
+        <div className="border border-gray-200 dark:border-gray-700 rounded-md p-3 min-h-[150px] bg-gray-50 dark:bg-gray-800 overflow-auto">
           {value ? (
             <ReactMarkdown
-              className="prose dark:prose-invert prose-sm max-w-none"
+              className="prose dark:prose-invert prose-sm max-w-none text-gray-900 dark:text-gray-100"
               components={markdownComponents}
             >
               {value}
             </ReactMarkdown>
           ) : (
-            <div className="text-gray-400 italic">Preview will appear here...</div>
+            <div className="text-gray-400 dark:text-gray-500 italic">Preview will appear here...</div>
           )}
         </div>
       ) : (
@@ -128,14 +128,11 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           placeholder={placeholder}
           disabled={disabled}
           rows={rows}
-          className="w-full px-3 py-2 border rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 text-black"
+          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
         />
       )}
 
-      {/* Markdown hint */}
-      <div className="text-xs text-gray-500">
-        Supports markdown formatting. Use **bold**, *italic*, `code`, and images.
-      </div>
+
     </div>
   );
 }; 
