@@ -1475,3 +1475,27 @@ export async function getAvailableProjectsForNote(excludeProjectId?: string): Pr
   if (error) throw error;
   return data || [];
 }
+
+// Update note metadata (priority, workflow_status, due_date)
+export async function updateNoteMetadata(nodeId: string, metadata: {
+  priority?: 'low' | 'medium' | 'high' | null;
+  workflow_status?: 'todo' | 'in_progress' | 'done' | 'blocked' | null;
+  due_date?: string | null;
+}): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const { error } = await supabase
+    .from("mindmap_nodes")
+    .update({ 
+      ...metadata,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", nodeId);
+
+  if (error) throw error;
+}

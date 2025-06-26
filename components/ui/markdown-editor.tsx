@@ -4,6 +4,7 @@ import { ImageUploadButton } from './image-upload';
 import { Button } from './button';
 import { Eye, Edit, ImageIcon } from 'lucide-react';
 import type { Components } from 'react-markdown';
+import { uploadImage } from '@/lib/supabase/storage';
 
 interface MarkdownEditorProps {
   value: string;
@@ -18,13 +19,15 @@ interface MarkdownEditorProps {
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   value,
   onChange,
-  placeholder = "Write in markdown...",
+  placeholder = "Escreva em markdown... (Cole imagens diretamente com Ctrl+V)",
   className = "",
   disabled = false,
   rows = 6,
   preview = true
 }) => {
   const [showPreview, setShowPreview] = useState(false);
+  const [isUploadingFromPaste, setIsUploadingFromPaste] = useState(false);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const markdownComponents: Components = {
@@ -83,6 +86,53 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
     }, 0);
   };
 
+  const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // Collect all image files
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.indexOf('image') === 0) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+
+    // If we have images, prevent default paste and upload them
+    if (imageFiles.length > 0) {
+      e.preventDefault();
+      setIsUploadingFromPaste(true);
+      setUploadingCount(imageFiles.length);
+      
+      try {
+        const uploadPromises = imageFiles.map(async (file, index) => {
+          const imageUrl = await uploadImage(file);
+          const timestamp = new Date().toISOString().split('T')[0];
+          const time = new Date().toLocaleTimeString('pt-BR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          });
+          return `![Imagem colada ${index + 1} - ${timestamp} ${time}](${imageUrl})`;
+        });
+
+        const markdownImages = await Promise.all(uploadPromises);
+        const combinedMarkdown = markdownImages.join('\n\n');
+        
+        // Insert all images at cursor position
+        insertImageMarkdown(combinedMarkdown);
+        
+      } catch (error) {
+        console.error('Error uploading pasted images:', error);
+        alert('Falha ao fazer upload de uma ou mais imagens. Tente novamente.');
+      } finally {
+        setIsUploadingFromPaste(false);
+        setUploadingCount(0);
+      }
+    }
+  };
+
   return (
     <div className={`space-y-2 ${className}`}>
       {/* Toolbar */}
@@ -121,15 +171,29 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
           )}
         </div>
       ) : (
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={rows}
-          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-        />
+        <div className="relative">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onPaste={handlePaste}
+            placeholder={placeholder}
+            disabled={disabled || isUploadingFromPaste}
+            rows={rows}
+            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+          />
+          {isUploadingFromPaste && (
+            <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 flex items-center justify-center rounded-md">
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-primary"></div>
+                {uploadingCount > 1 
+                  ? `Fazendo upload de ${uploadingCount} imagens...`
+                  : 'Fazendo upload da imagem...'
+                }
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
 

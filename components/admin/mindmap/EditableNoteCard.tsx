@@ -8,15 +8,44 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { NoteWithProject, MindmapProject } from "@/types/mindmap";
-import { updateNoteContent, moveNoteToProject, getAvailableProjectsForNote, deleteMindmapNode, toggleNodePinned, toggleNodeArchived } from "@/lib/mindmap";
+import { PrioritySelect } from "@/components/ui/priority-select";
+import { WorkflowSelect } from "@/components/ui/workflow-select";
+import { DatePicker } from "@/components/ui/date-picker";
+import { NoteWithProject, MindmapProject, Priority, WorkflowStatus } from "@/types/mindmap";
+import { updateNoteContent, moveNoteToProject, getAvailableProjectsForNote, deleteMindmapNode, toggleNodePinned, toggleNodeArchived, updateNoteMetadata } from "@/lib/mindmap";
 import { useToast } from "@/components/ui/use-toast";
 
-interface EditableNoteCardProps {
+// Interface for when used in NotesView (with project info)
+interface EditableNoteCardPropsWithProject {
   note: NoteWithProject;
   onUpdate: (updatedNote: NoteWithProject) => void;
   onRemove: (noteId: string, projectId: string) => void;
+  hideProjectSelector?: never;
 }
+
+// Interface for when used in Project page (without project info)
+interface EditableNoteCardPropsWithoutProject {
+  id: string;
+  content: string;
+  projectId: string;
+  isPinned?: boolean;
+  isArchived?: boolean;
+  priority?: Priority | null;
+  workflowStatus?: WorkflowStatus | null;
+  dueDate?: string | null;
+  onContentChange: (id: string, newContent: string) => void;
+  onPinnedChange?: (id: string, isPinned: boolean) => void;
+  onArchivedChange?: (id: string, isArchived: boolean) => void;
+  onPriorityChange?: (id: string, priority: Priority) => void;
+  onWorkflowStatusChange?: (id: string, status: WorkflowStatus) => void;
+  onDueDateChange?: (id: string, dueDate: string | null) => void;
+  onRemove?: (nodeId: string, projectId: string) => void;
+  hideProjectSelector: true;
+  note?: never;
+  onUpdate?: never;
+}
+
+type EditableNoteCardProps = EditableNoteCardPropsWithProject | EditableNoteCardPropsWithoutProject;
 
 const markdownComponents = {
   ul: ({ children, ...props }: any) => <ul className="list-disc pl-4 my-1" {...props}>{children}</ul>,
@@ -33,10 +62,24 @@ const markdownComponents = {
   )
 };
 
-export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardProps) {
+export function EditableNoteCard(props: EditableNoteCardProps) {
+  // Normalize props based on usage mode
+  const isProjectMode = props.hideProjectSelector === true;
+  
+  const noteId = isProjectMode ? props.id : props.note.id;
+  const noteContent = isProjectMode ? props.content : props.note.content;
+  const notePinned = isProjectMode ? (props.isPinned || false) : props.note.is_pinned;
+  const noteArchived = isProjectMode ? (props.isArchived || false) : props.note.is_archived;
+  const notePriority = isProjectMode ? props.priority : props.note.priority;
+  const noteWorkflowStatus = isProjectMode ? props.workflowStatus : props.note.workflow_status;
+  const noteDueDate = isProjectMode ? props.dueDate : props.note.due_date;
+
   const [isEditing, setIsEditing] = useState(false);
-  const [content, setContent] = useState(note.content);
-  const [selectedProjectId, setSelectedProjectId] = useState(note.project_id);
+  const [content, setContent] = useState(noteContent);
+  const [selectedProjectId, setSelectedProjectId] = useState(isProjectMode ? '' : props.note.project_id);
+  const [priority, setPriority] = useState<Priority | null>(notePriority || null);
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(noteWorkflowStatus || null);
+  const [dueDate, setDueDate] = useState<string | null>(noteDueDate || null);
   const [availableProjects, setAvailableProjects] = useState<MindmapProject[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
@@ -45,23 +88,29 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
   const cardRef = useRef<HTMLDivElement>(null);
 
   const handleCancel = useCallback(() => {
-    setContent(note.content);
-    setSelectedProjectId(note.project_id);
+    setContent(noteContent);
+    if (!isProjectMode) {
+      setSelectedProjectId(props.note.project_id);
+    }
+    setPriority(notePriority || null);
+    setWorkflowStatus(noteWorkflowStatus || null);
+    setDueDate(noteDueDate || null);
     setIsEditing(false);
-  }, [note.content, note.project_id]);
+  }, [noteContent, isProjectMode, notePriority, noteWorkflowStatus, noteDueDate]);
 
   useEffect(() => {
-    const loadProjects = async () => {
-      try {
-        const projects = await getAvailableProjectsForNote();
-        setAvailableProjects(projects);
-      } catch (error) {
-        console.error("Error loading projects:", error);
-      }
-    };
-
-    loadProjects();
-  }, []);
+    if (!isProjectMode) {
+      const loadProjects = async () => {
+        try {
+          const projects = await getAvailableProjectsForNote();
+          setAvailableProjects(projects);
+        } catch (error) {
+          console.error("Error loading projects:", error);
+        }
+      };
+      loadProjects();
+    }
+  }, [isProjectMode]);
 
   // Effect to handle clicks outside the component to cancel editing
   useEffect(() => {
@@ -90,13 +139,24 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
     };
   }, [isEditing, handleCancel, isSelectOpen]);
 
+  const handleOnClick = () => {
+    if (!isEditing) {
+      setIsEditing(true);
+    }
+  };
+
   const handleTogglePinned = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await toggleNodePinned(note.id);
-      // Optimistically update UI
-      const updatedNote = { ...note, is_pinned: !note.is_pinned };
-      onUpdate(updatedNote);
+      await toggleNodePinned(noteId);
+      
+      if (isProjectMode) {
+        props.onPinnedChange?.(noteId, !notePinned);
+      } else {
+        // Optimistically update UI
+        const updatedNote = { ...props.note, is_pinned: !props.note.is_pinned };
+        props.onUpdate(updatedNote);
+      }
     } catch (error) {
       console.error('Error toggling node pinned:', error);
       toast({ title: "Error", description: "Could not toggle pin status.", variant: "destructive" });
@@ -106,22 +166,35 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
   const handleToggleArchived = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await toggleNodeArchived(note.id);
-      // Optimistically update UI
-      const updatedNote = { ...note, is_archived: !note.is_archived };
-      onUpdate(updatedNote);
+      await toggleNodeArchived(noteId);
+      
+      if (isProjectMode) {
+        props.onArchivedChange?.(noteId, !noteArchived);
+      } else {
+        // Optimistically update UI
+        const updatedNote = { ...props.note, is_archived: !props.note.is_archived };
+        props.onUpdate(updatedNote);
+      }
     } catch (error) {
       console.error('Error toggling node archived:', error);
       toast({ title: "Error", description: "Could not toggle archive status.", variant: "destructive" });
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
     if (window.confirm("Tem certeza que deseja remover esta nota deste projeto? A nota poderá ser permanentemente excluída se não estiver em outros projetos.")) {
       setLoading(true);
       try {
-        await deleteMindmapNode(note.id, note.project_id);
-        onRemove(note.id, note.project_id);
+        if (isProjectMode) {
+          await deleteMindmapNode(noteId, props.projectId);
+          props.onRemove?.(noteId, props.projectId);
+        } else {
+          await deleteMindmapNode(props.note.id, props.note.project_id);
+          props.onRemove(props.note.id, props.note.project_id);
+        }
+        
         toast({
           title: "Nota removida",
           description: "A nota foi removida do projeto.",
@@ -137,6 +210,18 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
         setLoading(false);
       }
     }
+  };
+
+  const handlePriorityChange = (newPriority: Priority) => {
+    setPriority(newPriority);
+  };
+
+  const handleWorkflowStatusChange = (newStatus: WorkflowStatus) => {
+    setWorkflowStatus(newStatus);
+  };
+
+  const handleDueDateChange = (newDueDate: string | null) => {
+    setDueDate(newDueDate);
   };
 
   const formatDate = (dateString: string) => {
@@ -166,45 +251,65 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
     }
   };
 
-  const handleStartEdit = () => {
-    setContent(note.content);
-    setSelectedProjectId(note.project_id);
-    setIsEditing(true);
-  };
-
-  const handleCancelEditing = () => {
-    handleCancel();
-  };
-
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Update content if changed
-      if (content !== note.content) {
-        await updateNoteContent(note.id, content);
+      // Check if we need to update content
+      if (content !== noteContent) {
+        await updateNoteContent(noteId, content);
+        
+        if (isProjectMode) {
+          props.onContentChange(noteId, content);
+        }
       }
 
-      // Move to different project if changed
-      if (selectedProjectId !== note.project_id) {
-        await moveNoteToProject(note.id, note.project_id, selectedProjectId);
-        
-        // Remove from current view since it's moved to another project
-        onRemove(note.id, note.project_id);
-        
-        toast({
-          title: "Nota movida",
-          description: "A nota foi movida para outro projeto com sucesso.",
-          duration: 3000,
+      // Check if we need to update metadata (priority, workflow, due_date)
+      if (priority !== notePriority || workflowStatus !== noteWorkflowStatus || dueDate !== noteDueDate) {
+        await updateNoteMetadata(noteId, {
+          priority,
+          workflow_status: workflowStatus,
+          due_date: dueDate
         });
-      } else {
-        // Update the note in place
-        const updatedNote: NoteWithProject = {
-          ...note,
-          content,
-          updated_at: new Date().toISOString(),
-        };
-        onUpdate(updatedNote);
         
+        if (isProjectMode) {
+          props.onPriorityChange?.(noteId, priority!);
+          props.onWorkflowStatusChange?.(noteId, workflowStatus!);
+          props.onDueDateChange?.(noteId, dueDate);
+        }
+      }
+
+      if (!isProjectMode) {
+        // Move to different project if changed
+        if (selectedProjectId !== props.note.project_id) {
+          await moveNoteToProject(noteId, props.note.project_id, selectedProjectId);
+          
+          // Remove from current view since it's moved to another project
+          props.onRemove(noteId, props.note.project_id);
+          
+          toast({
+            title: "Nota movida",
+            description: "A nota foi movida para outro projeto com sucesso.",
+            duration: 3000,
+          });
+        } else {
+          // Update the note in place
+          const updatedNote: NoteWithProject = {
+            ...props.note,
+            content,
+            priority,
+            workflow_status: workflowStatus,
+            due_date: dueDate,
+            updated_at: new Date().toISOString(),
+          };
+          props.onUpdate(updatedNote);
+          
+          toast({
+            title: "Nota atualizada",
+            description: "O conteúdo foi salvo com sucesso.",
+            duration: 3000,
+          });
+        }
+      } else {
         toast({
           title: "Nota atualizada",
           description: "O conteúdo foi salvo com sucesso.",
@@ -232,38 +337,39 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
     <div
       ref={cardRef}
       className={cn(
-        "p-4 border rounded-lg hover:shadow-md transition-all duration-200 relative group bg-card text-card-foreground",
-        note.is_archived && "opacity-60 bg-muted/30",
-        isEditing && "ring-2 ring-primary",
+        "p-4 border rounded-lg hover:shadow-md transition-all duration-200 relative group bg-card text-card-foreground cursor-pointer",
+        noteArchived && "opacity-60 bg-muted/30",
+        isEditing && "ring-2 ring-primary cursor-default",
         !isExpanded && !isEditing && "max-h-[300px] overflow-hidden"
       )}
+      onClick={!isEditing ? handleOnClick : undefined}
     >
       {/* Status Indicators */}
       <div className="absolute top-2 left-2 flex gap-1 z-10">
-        {note.is_pinned && (
+        {notePinned && (
           <div className="bg-primary text-primary-foreground rounded-full p-1">
             <Pin size={10} />
           </div>
         )}
-        {note.is_archived && (
+        {noteArchived && (
           <div className="bg-muted text-muted-foreground rounded-full p-1">
             <Archive size={10} />
           </div>
         )}
       </div>
 
-      {/* Edit/Save buttons */}
+      {/* Action buttons */}
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
         {!isEditing ? (
           <>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} title={isExpanded ? "Recolher" : "Expandir"}>
               {isExpanded ? <Minimize2 size={12} /> : <Expand size={12} />}
             </Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleTogglePinned} title={note.is_pinned ? "Desafixar" : "Fixar"}>
-              {note.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleTogglePinned} title={notePinned ? "Desafixar" : "Fixar"}>
+              {notePinned ? <PinOff size={12} /> : <Pin size={12} />}
             </Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleToggleArchived} title={note.is_archived ? "Desarquivar" : "Arquivar"}>
-              {note.is_archived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleToggleArchived} title={noteArchived ? "Desarquivar" : "Arquivar"}>
+              {noteArchived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
             </Button>
             <Button
               variant="ghost"
@@ -275,13 +381,16 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
             >
               <Trash2 size={12} />
             </Button>
-            <Link
-              href={`/admin/project/${note.project_id}`}
-              className="text-muted-foreground hover:text-primary p-1"
-              title={`Ir para projeto: ${note.project_title}`}
-            >
-              <ExternalLink size={12} />
-            </Link>
+            {!isProjectMode && (
+              <Link
+                href={`/admin/project/${props.note.project_id}`}
+                className="text-muted-foreground hover:text-primary p-1"
+                title={`Ir para projeto: ${props.note.project_title}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink size={12} />
+              </Link>
+            )}
           </>
         ) : (
           <>
@@ -289,7 +398,7 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
               variant="ghost"
               size="icon"
               className="h-6 w-6"
-              onClick={handleSave}
+              onClick={(e) => { e.stopPropagation(); handleSave(); }}
               disabled={loading}
               title="Salvar alterações"
             >
@@ -299,7 +408,7 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
               variant="ghost"
               size="icon"
               className="h-6 w-6"
-              onClick={handleCancelEditing}
+              onClick={(e) => { e.stopPropagation(); handleCancel(); }}
               disabled={loading}
               title="Cancelar edição"
             >
@@ -310,91 +419,119 @@ export function EditableNoteCard({ note, onUpdate, onRemove }: EditableNoteCardP
       </div>
 
       {isEditing ? (
-        <div className="pt-6">
+        <div className="pt-6 space-y-4">
           <MarkdownEditor value={content} onChange={setContent} />
-          <div className="space-y-2 mt-4">
-            <label className="text-xs font-medium text-muted-foreground">Projeto:</label>
-            <Select 
-              value={selectedProjectId} 
-              onValueChange={(value) => setSelectedProjectId(value)}
-              disabled={loading}
-              onOpenChange={setIsSelectOpen}
-            >
-              <SelectTrigger className="w-full h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableProjects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    <div className="flex items-center gap-2">
-                      <span>{project.title}</span>
-                      {project.is_pinned && <Pin size={8} />}
-                      {selectedProjectId !== note.project_id && project.id === selectedProjectId && (
-                        <ArrowRight size={8} className="text-primary" />
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedProjectId !== note.project_id && (
-              <div className="text-xs text-primary">
-                Será movida para: {selectedProject?.title}
-              </div>
-            )}
+          
+          {/* Workflow Controls */}
+          <div className="space-y-2 border-t pt-3">
+            <div className="text-xs font-medium text-gray-600 mb-2">Controles de Workflow</div>
+            <div className="flex flex-wrap gap-2">
+              <PrioritySelect
+                value={priority}
+                onValueChange={handlePriorityChange}
+              />
+              <WorkflowSelect
+                value={workflowStatus}
+                onValueChange={handleWorkflowStatusChange}
+              />
+              <DatePicker
+                value={dueDate}
+                onValueChange={handleDueDateChange}
+                placeholder="Nenhuma data"
+              />
+            </div>
           </div>
+          
+          {!isProjectMode && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Projeto:</label>
+              <Select 
+                value={selectedProjectId} 
+                onValueChange={(value) => setSelectedProjectId(value)}
+                disabled={loading}
+                onOpenChange={setIsSelectOpen}
+              >
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableProjects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{project.title}</span>
+                        {project.is_pinned && <Pin size={8} />}
+                        {selectedProjectId !== props.note.project_id && project.id === selectedProjectId && (
+                          <ArrowRight size={8} className="text-primary" />
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedProjectId !== props.note.project_id && (
+                <div className="text-xs text-primary">
+                  Será movida para: {selectedProject?.title}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <>
-          <div className="mb-3 pt-6">
-            <Link 
-              href={`/admin/project/${note.project_id}`}
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              {note.project_title}
-              {note.project_is_pinned && <Pin size={8} className="inline ml-1" />}
-            </Link>
-          </div>
-          <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-normal mb-3">
+          {!isProjectMode && (
+            <div className="mb-3 pt-6">
+              <Link 
+                href={`/admin/project/${props.note.project_id}`}
+                className="text-xs font-medium text-primary hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {props.note.project_title}
+                {props.note.project_is_pinned && <Pin size={8} className="inline ml-1" />}
+              </Link>
+            </div>
+          )}
+          <div className={cn("prose prose-sm dark:prose-invert max-w-none text-sm leading-normal mb-3", isProjectMode && "pt-6")}>
             <ReactMarkdown components={markdownComponents}>
-              {note.content}
+              {content}
             </ReactMarkdown>
           </div>
         </>
       )}
 
-      {/* Metadata */}
-      <div className="space-y-2 text-xs mt-4">
-        {/* Priority and Workflow */}
-        <div className="flex gap-2 flex-wrap">
-          {note.priority && (
-            <span className={cn("px-2 py-1 rounded-full font-medium", getPriorityColor(note.priority))}>
-              {note.priority === 'high' ? 'Alta' : note.priority === 'medium' ? 'Média' : 'Baixa'}
+      {/* Workflow Status Indicators - only show if at least one field has a value and not editing */}
+      {!isEditing && (priority || workflowStatus || dueDate) && (
+        <div className="mt-2 flex flex-wrap gap-2 border-t pt-2">
+          {priority && (
+            <span className={cn("px-2 py-1 rounded-full font-medium text-xs", getPriorityColor(priority))}>
+              {priority === 'high' ? 'Alta' : priority === 'medium' ? 'Média' : 'Baixa'}
             </span>
           )}
-          {note.workflow_status && (
-            <span className={cn("px-2 py-1 rounded-full font-medium", getWorkflowColor(note.workflow_status))}>
-              {note.workflow_status === 'todo' ? 'A fazer' : 
-               note.workflow_status === 'in_progress' ? 'Em progresso' :
-               note.workflow_status === 'done' ? 'Concluído' : 'Bloqueado'}
+          {workflowStatus && (
+            <span className={cn("px-2 py-1 rounded-full font-medium text-xs", getWorkflowColor(workflowStatus))}>
+              {workflowStatus === 'todo' ? 'A fazer' : 
+               workflowStatus === 'in_progress' ? 'Em progresso' :
+               workflowStatus === 'done' ? 'Concluído' : 'Bloqueado'}
             </span>
+          )}
+          {dueDate && (
+            <div className="flex items-center gap-1 text-muted-foreground text-xs">
+              <Calendar size={10} />
+              <span>Prazo: {formatDate(dueDate)}</span>
+            </div>
           )}
         </div>
+      )}
 
-        {/* Due Date */}
-        {note.due_date && (
+      {/* Metadata - only show if not editing */}
+      {!isEditing && !isProjectMode && (
+        <div className="space-y-2 text-xs mt-4">
+          {/* Last Updated */}
           <div className="flex items-center gap-1 text-muted-foreground">
-            <Calendar size={10} />
-            <span>Prazo: {formatDate(note.due_date)}</span>
+            <Clock size={10} />
+            <span>Atualizado: {formatDate(props.note.updated_at || props.note.created_at || '')}</span>
           </div>
-        )}
-
-        {/* Last Updated */}
-        <div className="flex items-center gap-1 text-muted-foreground">
-          <Clock size={10} />
-          <span>Atualizado: {formatDate(note.updated_at || note.created_at || '')}</span>
         </div>
-      </div>
+      )}
     </div>
   );
 } 

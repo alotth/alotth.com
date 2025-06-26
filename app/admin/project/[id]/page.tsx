@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import NoteCard from "@/components/note/NoteCard";
+import { EditableNoteCard } from "@/components/admin/mindmap/EditableNoteCard";
 import { v4 as uuidv4 } from "uuid";
 import { Dispatch, SetStateAction } from "react";
 import { Node, Edge, NodeChange } from "reactflow";
@@ -78,7 +78,7 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
             <MarkdownEditor
               value={newNoteText}
               onChange={setNewNoteText}
-              placeholder="Write your note..."
+              placeholder="Escreva sua nota... (Cole prints com Ctrl+V para anexar automaticamente)"
             />
             
             <div className="space-y-2 border-t dark:border-gray-700 pt-3">
@@ -673,24 +673,30 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                       }
                       return 0;
                     })
-                    .map((node) => (
-                      <NoteCard
-                        key={node.id}
-                        id={node.id}
-                        content={node.data.content}
-                        isPinned={node.data.isPinned}
-                        isArchived={node.data.isArchived}
-                        priority={node.data.priority}
-                        workflowStatus={node.data.workflowStatus}
-                        dueDate={node.data.dueDate}
-                        onContentChange={handleNoteContentChange}
-                        onPinnedChange={handleNotePinnedChange}
-                        onArchivedChange={handleNoteArchivedChange}
-                        onPriorityChange={handleNotePriorityChange}
-                        onWorkflowStatusChange={handleNoteWorkflowStatusChange}
-                        onDueDateChange={handleNoteDueDateChange}
-                      />
-                    ))}
+                                      .map((node) => (
+                    <EditableNoteCard
+                      key={node.id}
+                      id={node.id}
+                      content={node.data.content}
+                      projectId={id}
+                      isPinned={node.data.isPinned}
+                      isArchived={node.data.isArchived}
+                      priority={node.data.priority}
+                      workflowStatus={node.data.workflowStatus}
+                      dueDate={node.data.dueDate}
+                      onContentChange={handleNoteContentChange}
+                      onPinnedChange={handleNotePinnedChange}
+                      onArchivedChange={handleNoteArchivedChange}
+                      onPriorityChange={handleNotePriorityChange}
+                      onWorkflowStatusChange={handleNoteWorkflowStatusChange}
+                      onDueDateChange={handleNoteDueDateChange}
+                      onRemove={(nodeId) => {
+                        // Remove the node using the mindmap hook
+                        removeNode(nodeId);
+                      }}
+                      hideProjectSelector={true}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
