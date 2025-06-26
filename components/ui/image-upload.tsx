@@ -192,14 +192,13 @@ export const ImageUploadButton: React.FC<ImageUploadButtonProps> = ({
         size={size}
         onClick={openFileDialog}
         disabled={disabled || uploading}
-        className="gap-2"
+        className="h-6 px-2"
       >
         {uploading ? (
-          <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-current"></div>
+          <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-current"></div>
         ) : (
-          <ImageIcon className="h-4 w-4" />
+          <ImageIcon className="h-3 w-3" />
         )}
-        {uploading ? 'Uploading...' : 'Add Image'}
       </Button>
     </>
   );

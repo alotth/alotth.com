@@ -432,7 +432,7 @@ export default function MindmapPage() {
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-xl shadow-lg max-h-[90vh] overflow-y-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-xl shadow-lg max-h-[90vh] overflow-consistent">
           <h2 className="text-lg font-semibold mb-4">Create New Project</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -452,7 +452,7 @@ export default function MindmapPage() {
                 value={description}
                 onChange={setDescription}
                 placeholder="Write description in markdown..."
-                rows={4}
+                rows={1}
               />
             </div>
             <div className="flex flex-col sm:flex-row justify-end gap-3">
@@ -571,7 +571,7 @@ export default function MindmapPage() {
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-consistent">
           <h2 className="text-lg font-semibold mb-4">Import Projects (JSON)</h2>
           <div className="mb-4">
             <Button variant="outline" onClick={copyExample} type="button" className="text-sm w-full sm:w-auto">
@@ -687,7 +687,7 @@ export default function MindmapPage() {
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-y-auto">
+        <div className="bg-white dark:bg-gray-900 rounded-lg p-4 sm:p-6 w-full max-w-2xl shadow-lg max-h-[90vh] overflow-consistent">
           <h2 className="text-lg font-semibold mb-4">Edit Description</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

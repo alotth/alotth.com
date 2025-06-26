@@ -2,7 +2,9 @@ import { Node, Edge } from "reactflow";
 import { useState } from "react";
 import { ProjectSelectorModal } from "./ProjectSelectorModal";
 import { ImportNodesModal } from "./ImportNodesModal";
-import { Plus, Link, Upload, LayoutGrid, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Link, Upload, LayoutGrid } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tooltip } from "@/components/ui/tooltip";
 
 interface ToolbarProps {
   onAddNode: () => void;
@@ -32,7 +34,6 @@ export function Toolbar({
   currentProjectId,
   onAutoOrganize,
 }: ToolbarProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const [isProjectSelectorOpen, setIsProjectSelectorOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const nodeStyle = selectedNode?.data?.style || {};
@@ -53,106 +54,111 @@ export function Toolbar({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row gap-2 bg-white dark:bg-gray-800 p-2 sm:p-3 rounded-md shadow-md text-gray-900 dark:text-gray-100 min-w-0 border border-gray-200 dark:border-gray-700">
-      {/* Toggle collapse button - show on all screen sizes */}
-      <button
-        onClick={() => setCollapsed((prev) => !prev)}
-        className="self-end text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 p-1"
-        title={collapsed ? "Expand toolbar" : "Collapse toolbar"}
-      >
-        {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-      </button>
+    <div className="flex items-center gap-1 p-1 rounded-lg border bg-card text-card-foreground shadow-sm">
+      {/* Main action buttons */}
+      <div className="flex items-center gap-1">
+        <Tooltip content="Adicionar nova nota" side="top">
+          <Button
+            onClick={onAddNode}
+            size="sm"
+            variant="default"
+            className="h-8 w-8 p-0"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </Tooltip>
 
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={onAddNode}
-          title="Add Node"
-          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors whitespace-nowrap"
-        >
-          <Plus size={14} className="sm:w-4 sm:h-4" />
-          {!collapsed && <span className="hidden sm:inline">Add Node</span>}
-        </button>
+        <Tooltip content="Adicionar nota de outro projeto" side="top">
+          <Button
+            onClick={() => setIsProjectSelectorOpen(true)}
+            size="sm"
+            variant="secondary"
+            className="h-8 w-8 p-0"
+          >
+            <Link className="h-4 w-4" />
+          </Button>
+        </Tooltip>
 
-        <button
-          onClick={() => setIsProjectSelectorOpen(true)}
-          title="Add Node from a Project"
-          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm bg-green-500 text-white rounded hover:bg-green-600 transition-colors whitespace-nowrap"
-        >
-          <Link size={14} className="sm:w-4 sm:h-4" />
-          {!collapsed && <span className="hidden sm:inline">Add Node from a Project</span>}
-        </button>
+        <Tooltip content="Organizar automaticamente" side="top">
+          <Button
+            onClick={onAutoOrganize}
+            size="sm"
+            variant="outline"
+            className="h-8 w-8 p-0"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </Tooltip>
 
-        <button
-          onClick={onAutoOrganize}
-          title="Auto Organize"
-          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors whitespace-nowrap"
-        >
-          <LayoutGrid size={14} className="sm:w-4 sm:h-4" />
-          {!collapsed && <span className="hidden sm:inline">Auto Organize</span>}
-        </button>
-
-        <button
-          onClick={() => setIsImportModalOpen(true)}
-          title="Import Nodes"
-          className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-1 text-xs sm:text-sm bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors whitespace-nowrap"
-        >
-          <Upload size={14} className="sm:w-4 sm:h-4" />
-          {!collapsed && <span className="hidden sm:inline">Import Nodes</span>}
-        </button>
+        <Tooltip content="Importar notas de arquivo JSON" side="top">
+          <Button
+            onClick={() => setIsImportModalOpen(true)}
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0"
+          >
+            <Upload className="h-4 w-4" />
+          </Button>
+        </Tooltip>
       </div>
 
-      {/* Node style controls */}
-      {!collapsed && selectedNode && (
-        <div className="mt-2 sm:mt-4 p-2 sm:p-3 border border-gray-200 dark:border-gray-600 rounded min-w-0 w-full sm:w-auto bg-gray-50 dark:bg-gray-700">
-          <h3 className="text-xs sm:text-sm font-medium mb-2 text-gray-900 dark:text-gray-100">Node Style</h3>
-          <div className="space-y-2">
-            <div>
-              <label className="text-xs block text-gray-900 dark:text-gray-200">Background Color</label>
-              <input
-                type="color"
-                value={nodeStyle.backgroundColor || defaultStyle.backgroundColor}
-                onChange={(e) =>
-                  onStyleChange({
-                    ...nodeStyle,
-                    backgroundColor: e.target.value,
-                  })
-                }
-                className="w-full h-8 sm:h-6 rounded border border-gray-300 dark:border-gray-600"
-              />
+      {/* Separator and style controls for selected nodes */}
+      {selectedNode && (
+        <>
+          <div className="h-6 w-px bg-border mx-1" />
+          <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1">
+              <label className="text-xs text-muted-foreground">BG:</label>
+              <Tooltip content="Cor de fundo da nota" side="top">
+                <input
+                  type="color"
+                  value={nodeStyle.backgroundColor || defaultStyle.backgroundColor}
+                  onChange={(e) =>
+                    onStyleChange({
+                      ...nodeStyle,
+                      backgroundColor: e.target.value,
+                    })
+                  }
+                  className="w-6 h-6 rounded border border-input cursor-pointer"
+                />
+              </Tooltip>
             </div>
-            <div>
-              <label className="text-xs block text-gray-900 dark:text-gray-200">Border Color</label>
-              <input
-                type="color"
-                value={nodeStyle.borderColor || defaultStyle.borderColor}
-                onChange={(e) =>
-                  onStyleChange({
-                    ...nodeStyle,
-                    borderColor: e.target.value,
-                  })
-                }
-                className="w-full h-8 sm:h-6 rounded border border-gray-300 dark:border-gray-600"
-              />
+            <div className="flex items-center gap-1">
+              <label className="text-xs text-muted-foreground">Border:</label>
+              <Tooltip content="Cor da borda da nota" side="top">
+                <input
+                  type="color"
+                  value={nodeStyle.borderColor || defaultStyle.borderColor}
+                  onChange={(e) =>
+                    onStyleChange({
+                      ...nodeStyle,
+                      borderColor: e.target.value,
+                    })
+                  }
+                  className="w-6 h-6 rounded border border-input cursor-pointer"
+                />
+              </Tooltip>
             </div>
-            <div>
-              <label className="text-xs block text-gray-900 dark:text-gray-200">Font Size</label>
-              <input
-                type="number"
-                value={nodeStyle.fontSize || defaultStyle.fontSize}
-                onChange={(e) =>
-                  onStyleChange({
-                    ...nodeStyle,
-                    fontSize: parseInt(e.target.value),
-                  })
-                }
-                className="w-full px-2 py-2 sm:py-1 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                min="8"
-                max="32"
-              />
+            <div className="flex items-center gap-1">
+              <label className="text-xs text-muted-foreground">Size:</label>
+              <Tooltip content="Tamanho da fonte (8-32px)" side="top">
+                <input
+                  type="number"
+                  value={nodeStyle.fontSize || defaultStyle.fontSize}
+                  onChange={(e) =>
+                    onStyleChange({
+                      ...nodeStyle,
+                      fontSize: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-12 h-6 px-1 text-xs border border-input rounded bg-background"
+                  min="8"
+                  max="32"
+                />
+              </Tooltip>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Project Selector Modal */}

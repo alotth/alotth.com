@@ -52,11 +52,11 @@ export function PrioritySelect({ value, onValueChange, disabled, className }: Pr
   return (
     <Select value={value ?? undefined} onValueChange={handleValueChange} disabled={disabled}>
       <SelectTrigger className={`w-[100px] h-8 px-2 text-xs ${config ? `${config.bgColor} ${config.borderColor}` : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'} ${className || ''}`}>
-        <SelectValue placeholder="Prioridade">
+        <SelectValue placeholder="🔥">
           {config && (
             <div className="flex items-center gap-1">
               <span className="text-xs">{config.icon}</span>
-              <span className={`text-xs font-medium ${config.textColor}`}>{config.label}</span>
+              <span className={`text-xs font-medium ${config.textColor} hidden sm:inline`}>{config.label}</span>
             </div>
           )}
         </SelectValue>

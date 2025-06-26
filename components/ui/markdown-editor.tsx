@@ -14,16 +14,18 @@ interface MarkdownEditorProps {
   disabled?: boolean;
   rows?: number;
   preview?: boolean;
+  extraControls?: React.ReactNode;
 }
 
 export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   value,
   onChange,
-  placeholder = "Escreva em markdown... (Cole imagens diretamente com Ctrl+V)",
+  placeholder = "Escreva em markdown...",
   className = "",
   disabled = false,
-  rows = 6,
-  preview = true
+  rows = 2,
+  preview = true,
+  extraControls
 }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [isUploadingFromPaste, setIsUploadingFromPaste] = useState(false);
@@ -136,29 +138,33 @@ export const MarkdownEditor: React.FC<MarkdownEditorProps> = ({
   return (
     <div className={`space-y-2 ${className}`}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2">
-        <ImageUploadButton
-          onImageUploaded={() => {}}
-          onImageMarkdown={insertImageMarkdown}
-          disabled={disabled}
-        />
-        {preview && (
-          <Button
-            type="button"
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <ImageUploadButton
+            onImageUploaded={() => {}}
+            onImageMarkdown={insertImageMarkdown}
+            disabled={disabled}
             variant="outline"
             size="sm"
-            onClick={() => setShowPreview(!showPreview)}
-            className="gap-2"
-          >
-            {showPreview ? <Edit className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {showPreview ? 'Edit' : 'Preview'}
-          </Button>
-        )}
+          />
+          {preview && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPreview(!showPreview)}
+              className="h-6 px-2"
+            >
+              {showPreview ? <Edit className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+            </Button>
+          )}
+          {extraControls}
+        </div>
       </div>
 
       {/* Editor/Preview */}
       {showPreview ? (
-        <div className="border border-gray-200 dark:border-gray-700 rounded-md p-3 min-h-[150px] bg-gray-50 dark:bg-gray-800 overflow-auto">
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-md p-3 min-h-[150px] bg-gray-50 dark:bg-gray-800 overflow-consistent">
           {value ? (
             <ReactMarkdown
               className="prose dark:prose-invert prose-sm max-w-none text-gray-900 dark:text-gray-100"

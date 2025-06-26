@@ -76,9 +76,9 @@ export function DatePicker({ value, onValueChange, disabled, className, placehol
         onClick={() => setIsOpen(!isOpen)}
         className={`w-[120px] h-8 px-2 justify-start text-left font-normal text-xs ${
           value ? 'text-foreground' : 'text-muted-foreground'
-        } ${overdue ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400' : ''}`}
+        } ${overdue ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 text-red-700 dark:text-red-400' : ''} ${className || ''}`}
       >
-        <Calendar className="mr-1 h-3 w-3" />
+        <Calendar className="mr-1 h-3 w-3 hidden sm:inline" />
         <span className="text-xs truncate">
           {formattedDate || placeholder}
         </span>

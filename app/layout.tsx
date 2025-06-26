@@ -19,11 +19,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${inter.className} antialiased overflow-consistent`}>
         <ThemeProvider>
-          <div className="min-h-screen">
+          <div className="min-h-screen flex flex-col">
             <Header />
-            <main>{children}</main>
+            <main className="flex-1 overflow-consistent">{children}</main>
           </div>
         </ThemeProvider>
         <Toaster />

@@ -406,11 +406,19 @@ export async function getAvailableProjects(currentProjectId: string): Promise<Mi
   const { data, error } = await supabase
     .from("mindmap_projects")
     .select("*")
-    .neq("id", currentProjectId)
+    .eq("user_id", session.user.id)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data;
+  
+  // Sort to put current project first
+  const sortedData = data?.sort((a, b) => {
+    if (a.id === currentProjectId) return -1;
+    if (b.id === currentProjectId) return 1;
+    return 0;
+  }) || [];
+  
+  return sortedData;
 }
 
 export async function createNodeReference(

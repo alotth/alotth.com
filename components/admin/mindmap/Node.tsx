@@ -175,7 +175,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
             className={cn(
               "w-full font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900",
               isExpanded ? "min-h-[200px]" : "min-h-[100px]",
-              "overflow-y-auto max-h-[500px]"
+              "overflow-consistent max-h-[500px]"
             )}
             style={{
               fontSize: data.style?.fontSize || 14,

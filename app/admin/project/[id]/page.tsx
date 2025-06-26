@@ -20,11 +20,17 @@ import { Node, Edge, NodeChange } from "reactflow";
 import Dagre from "@dagrejs/dagre";
 import { MindmapProject, Priority, WorkflowStatus } from "@/types/mindmap";
 import { getAvailableProjects } from "@/lib/mindmap";
-import { ChevronLeft, ChevronRight, Menu, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X, Upload } from "lucide-react";
 import { PrioritySelect } from "@/components/ui/priority-select";
 import { WorkflowSelect } from "@/components/ui/workflow-select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
+import { Save } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
+import { ImportNodesModal } from "@/components/admin/mindmap/ImportNodesModal";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { updateMindmapNodes } from "@/lib/mindmap";
 
 interface MindmapPageProps {
   params: {
@@ -35,88 +41,133 @@ interface MindmapPageProps {
 type ViewType = "mindmap" | "notes";    
 
 interface QuickCreateNoteProps {
-  creatingNote: boolean;
-  setCreatingNote: Dispatch<SetStateAction<boolean>>;
   newNoteText: string;
   setNewNoteText: Dispatch<SetStateAction<string>>;
-  saveNewNote: (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null) => void;
+  saveNewNote: (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null, targetProjectIds?: string[]) => void;
+  currentProjectId: string;
+  projects: MindmapProject[];
 }
 
 const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
-  creatingNote,
-  setCreatingNote,
   newNoteText,
   setNewNoteText,
   saveNewNote,
+  currentProjectId,
+  projects,
 }) => {
   const [priority, setPriority] = useState<Priority | null>(null);
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
   const [dueDate, setDueDate] = useState<string | null>(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+
+  // Set current project as default on mount and when projects change
+  useEffect(() => {
+    if (projects.length > 0) {
+      console.log('🔍 Debug - currentProjectId:', currentProjectId);
+      console.log('🔍 Debug - projects:', projects.map(p => ({ id: p.id, title: p.title })));
+      
+      // Find current project in the list
+      const currentProject = projects.find(p => p.id === currentProjectId);
+      console.log('🔍 Debug - currentProject found:', currentProject);
+      
+      if (currentProject && !selectedProjectIds.includes(currentProjectId)) {
+        console.log('✅ Setting current project as default:', currentProject.title);
+        setSelectedProjectIds([currentProjectId]);
+      } else if (!currentProject && selectedProjectIds.length === 0) {
+        console.log('❌ Current project not found, using first project:', projects[0]?.title);
+        setSelectedProjectIds([projects[0].id]);
+      }
+    }
+  }, [projects, currentProjectId]);
 
   const handleSave = async () => {
-    // Pass the workflow attributes to saveNewNote
-    await saveNewNote(priority, workflowStatus, dueDate);
-    // Reset form
+    if (newNoteText.trim() === "") return;
+    
+    // Use current project if none selected
+    const targetIds = selectedProjectIds.length > 0 ? selectedProjectIds : [currentProjectId];
+    
+    // Pass the workflow attributes and target projects to saveNewNote
+    await saveNewNote(priority, workflowStatus, dueDate, targetIds);
+    // Reset form but keep current project selected
     setPriority(null);
     setWorkflowStatus(null);
     setDueDate(null);
+    setSelectedProjectIds([currentProjectId]);
   };
 
   const handleCancel = () => {
-    setCreatingNote(false);
     setNewNoteText("");
     setPriority(null);
     setWorkflowStatus(null);
     setDueDate(null);
+    setSelectedProjectIds([currentProjectId]);
   };
 
+  const projectOptions = projects.map(project => ({
+    label: project.title,
+    value: project.id
+  }));
+
+  // Ensure current project is selected if no selection exists or if current project is not selected
+  const effectiveSelectedIds = (() => {
+    if (selectedProjectIds.length > 0) {
+      return selectedProjectIds;
+    }
+    // If no selection, use current project
+    const currentProject = projects.find(p => p.id === currentProjectId);
+    if (currentProject) {
+      console.log('🔧 Using current project as effective selection:', currentProject.title);
+      return [currentProjectId];
+    }
+    // Fallback to first project
+    return projects.length > 0 ? [projects[0].id] : [];
+  })();
+
   return (
-    <div className="mb-4 sm:mb-6 w-full min-w-[100px] max-w-[500px]">
-      <div className="p-4 rounded-lg border bg-card text-card-foreground transition-all duration-200">
-        {creatingNote ? (
-          <div className="space-y-4">
-            <MarkdownEditor
-              value={newNoteText}
-              onChange={setNewNoteText}
-              placeholder="Escreva sua nota... (Cole prints com Ctrl+V para anexar automaticamente)"
-            />
-            
-            <div className="space-y-2 border-t dark:border-gray-700 pt-3">
-              <div className="text-xs font-medium text-muted-foreground mb-2">Controles de Workflow</div>
-              <div className="flex flex-wrap gap-2">
+    <div className="mb-4 sm:mb-6 w-full min-w-[100px] max-w-[600px]">
+      <div className="p-2 rounded-lg border bg-card text-card-foreground transition-all duration-200">
+        <div className="space-y-2">
+          {/* Text area with controls in toolbar */}
+          <MarkdownEditor
+            value={newNoteText}
+            onChange={setNewNoteText}
+            placeholder="Take a note..."
+            extraControls={
+              <div className="flex items-center gap-1">
+                <MultiSelect
+                  options={projectOptions}
+                  selected={effectiveSelectedIds}
+                  onChange={setSelectedProjectIds}
+                  className="w-[80px] h-6"
+                />
                 <PrioritySelect
                   value={priority}
                   onValueChange={setPriority}
+                  className="w-[60px] h-6"
                 />
                 <WorkflowSelect
                   value={workflowStatus}
                   onValueChange={setWorkflowStatus}
+                  className="w-[60px] h-6"
                 />
                 <DatePicker
                   value={dueDate}
                   onValueChange={setDueDate}
-                  placeholder="Nenhuma data"
+                  placeholder="📅"
+                  className="w-[60px] h-6"
                 />
+                <div className="flex gap-1 ml-2 border-l pl-2">
+                  <Button onClick={handleSave} size="sm" className="h-6 px-2 text-xs" disabled={newNoteText.trim() === ""}>
+                    <Save className="h-3 w-3" />
+                  </Button>
+                  <Button onClick={handleCancel} variant="ghost" size="sm" className="h-6 px-1 text-xs" disabled={newNoteText.trim() === "" && !priority && !workflowStatus && !dueDate}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
-            </div>
-            
-            <div className="flex gap-2 pt-2">
-              <Button onClick={handleSave}>
-                Save
-              </Button>
-              <Button onClick={handleCancel} variant="ghost">
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="text-muted-foreground cursor-text text-sm sm:text-base"
-            onClick={() => setCreatingNote(true)}
-          >
-            Take a note...
-          </div>
-        )}
+            }
+          />
+        </div>
       </div>
     </div>
   );
@@ -198,6 +249,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   });
   const [sidebarOpen, setSidebarOpen] = useState(false); // For mobile overlay
   const [projectsLoading, setProjectsLoading] = useState(true);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const {
     nodes,
@@ -215,8 +267,17 @@ export default function MindmapPage({ params }: MindmapPageProps) {
 
   // Local state for project title
   const [projectTitle, setProjectTitle] = useState<string | null>(null);
-  const [creatingNote, setCreatingNote] = useState(false);
   const [newNoteText, setNewNoteText] = useState("");
+
+  // Handle custom event for opening import modal
+  useEffect(() => {
+    const handleOpenImportModal = () => {
+      setIsImportModalOpen(true);
+    };
+
+    window.addEventListener('open-import-modal', handleOpenImportModal);
+    return () => window.removeEventListener('open-import-modal', handleOpenImportModal);
+  }, []);
 
   // Handle window resize for responsive sidebar
   useEffect(() => {
@@ -306,6 +367,24 @@ export default function MindmapPage({ params }: MindmapPageProps) {
       console.error(`[PAGE-${timestamp}] ❌ Erro em handleAddNode:`, error);
     }
   }, [addNode]);
+
+  // Create note in external project without updating local state
+  const createNoteInProject = async (nodeData: any, targetProjectId: string) => {
+    try {
+      const supabase = createClientComponentClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      // Create the note directly in the target project without affecting local state
+      await updateMindmapNodes({
+        projectId: targetProjectId,
+        nodes: [nodeData],
+      });
+    } catch (error) {
+      console.error(`Error creating note in project ${targetProjectId}:`, error);
+      throw error;
+    }
+  };
 
   // Add new project node
   const handleAddProjectNode = useCallback(
@@ -431,15 +510,14 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     updateNode(nodeId, { dueDate });
   };
 
-  const saveNewNote = async (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null) => {
+  const saveNewNote = async (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null, targetProjectIds?: string[]) => {
     if (newNoteText.trim() === "") {
-      setCreatingNote(false);
-      setNewNoteText("");
       return;
     }
     try {
-      await addNode({
-        id: uuidv4(),
+      const nodeId = uuidv4();
+      const nodeData = {
+        id: nodeId,
         position: { x: 100, y: 100 },
         data: {
           content: newNoteText,
@@ -453,9 +531,37 @@ export default function MindmapPage({ params }: MindmapPageProps) {
           workflowStatus: workflowStatus || null,
           dueDate: dueDate || null,
         },
-      });
+      };
+
+      // If creating in multiple projects
+      if (targetProjectIds && targetProjectIds.length > 0) {
+        const currentProjectSelected = targetProjectIds.includes(id);
+        
+        if (currentProjectSelected) {
+          // Create in current project (this updates local state)
+          await addNode(nodeData);
+          
+          // Create the same note in other projects WITHOUT updating local state
+          const otherProjects = targetProjectIds.filter(pid => pid !== id);
+          for (const projectId of otherProjects) {
+            await createNoteInProject(nodeData, projectId);
+          }
+        } else {
+          // Current project not selected, create in first selected project only
+          await createNoteInProject(nodeData, targetProjectIds[0]);
+          
+          // Create in remaining projects
+          const remainingProjects = targetProjectIds.slice(1);
+          for (const projectId of remainingProjects) {
+            await createNoteInProject(nodeData, projectId);
+          }
+        }
+      } else {
+        // Default to current project
+        await addNode(nodeData);
+      }
+      
       setNewNoteText("");
-      setCreatingNote(false);
     } catch (err) {
       console.error("Failed to create note", err);
     }
@@ -541,7 +647,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
           </button>
         </div>
         
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-consistent">
           {projectsLoading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
@@ -585,18 +691,37 @@ export default function MindmapPage({ params }: MindmapPageProps) {
         <div className="p-3 sm:p-6 border-b border-border space-y-3">
           {/* Top row with controls */}
           <div className="flex items-center justify-between">
-            <Select
-              value={viewType}
-              onValueChange={(value: string) => setViewType(value as ViewType)}
-            >
-              <SelectTrigger className="w-[140px] sm:w-[180px] text-sm">
-                <SelectValue placeholder="Select view" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="mindmap">Mindmap View</SelectItem>
-                <SelectItem value="notes">Notes View</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select
+                value={viewType}
+                onValueChange={(value: string) => setViewType(value as ViewType)}
+              >
+                <SelectTrigger className="w-[140px] sm:w-[180px] text-sm">
+                  <SelectValue placeholder="Select view" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mindmap">Mindmap View</SelectItem>
+                  <SelectItem value="notes">Notes View</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              {/* Import button - always visible */}
+              <Tooltip content="Importar notas de arquivo JSON" side="top">
+                <Button
+                  onClick={() => {
+                    // We'll need to handle this differently since we moved it out of toolbar
+                    const event = new CustomEvent('open-import-modal');
+                    window.dispatchEvent(event);
+                  }}
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0"
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+              </Tooltip>
+            </div>
+            
             <Link href="/admin/project">
               <Button variant="outline" size="sm" className="text-xs sm:text-sm whitespace-nowrap">Back to Projects</Button>
             </Link>
@@ -635,30 +760,17 @@ export default function MindmapPage({ params }: MindmapPageProps) {
               />
             </div>
           ) : (
-            <div className="h-full overflow-y-auto">
+            <div className="h-full overflow-consistent">
               <div className="p-3 sm:p-6">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center mb-4 sm:mb-6 gap-4">
-                  <div className="w-full sm:w-auto overflow-x-auto">
-                    <Toolbar
-                      onAddNode={handleAddNode}
-                      onAddProjectNode={handleAddProjectNode}
-                      onStyleChange={() => {}}
-                      onImportJSON={() => {}}
-                      selectedNode={null}
-                      selectedEdge={null}
-                      currentProjectId={id}
-                      onAutoOrganize={handleAutoOrganize}
-                    />
-                  </div>
-                  <div className="w-full flex items-center justify-center">
-                    <QuickCreateNote
-                      creatingNote={creatingNote}
-                      setCreatingNote={setCreatingNote}
-                      newNoteText={newNoteText}
-                      setNewNoteText={setNewNoteText}
-                      saveNewNote={saveNewNote}
-                    />
-                  </div>
+                {/* Quick Create Note - full width and centered */}
+                <div className="flex justify-center mb-6">
+                  <QuickCreateNote
+                    newNoteText={newNoteText}
+                    setNewNoteText={setNewNoteText}
+                    saveNewNote={saveNewNote}
+                    currentProjectId={id}
+                    projects={projects}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -703,6 +815,16 @@ export default function MindmapPage({ params }: MindmapPageProps) {
           )}
         </div>
       </div>
+      
+      {/* Import Modal */}
+      <ImportNodesModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={(data) => {
+          handleImportNodes(data);
+          setIsImportModalOpen(false);
+        }}
+      />
     </div>
   );
 }
