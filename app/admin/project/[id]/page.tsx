@@ -1,7 +1,6 @@
 "use client";
 
 import { EditorMindmap } from "@/components/admin/mindmap/Editor";
-import { Toolbar } from "@/components/admin/mindmap/Toolbar";
 import { useMindmap } from "@/hooks/useMindmap";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -137,7 +136,7 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
 
   return (
     <div className="mb-4 sm:mb-6 w-full min-w-[100px] max-w-[600px]">
-      <div className="p-2 rounded-lg border bg-card text-card-foreground transition-all duration-200">
+      <div className="p-2 rounded-lg border border-border bg-black/20 backdrop-blur-md text-white transition-all duration-200 shadow-xl">
         <div className="space-y-2">
           {/* Text area with controls in toolbar */}
           <MarkdownEditor
@@ -997,7 +996,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                     onBulkWorkflowChange={handleBulkWorkflowChange}
                     onSave={handleSaveAndRefresh}
                     variant="inline"
-                    className="shadow-md"
+                    className=""
                   />
                   
                   {/* Search for current project */}
@@ -1012,7 +1011,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                   
                   {/* Quick Create Note - full width and centered */}
                   <div className="flex justify-center">
-                    <div className="shadow-md">
+                    <div>
                       <QuickCreateNote
                         newNoteText={newNoteText}
                         setNewNoteText={setNewNoteText}

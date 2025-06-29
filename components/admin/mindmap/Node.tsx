@@ -73,7 +73,6 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   useEffect(() => {
     const handleEditEvent = (event: any) => {
       if (event.detail.nodeId === id) {
-        console.log('[NODE] Custom edit event received for node:', id);
         setIsEditing(true);
         // Emit edit start event
         document.dispatchEvent(new CustomEvent('nodeEditStart'));
@@ -89,31 +88,8 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     }
   }, [id]);
 
-  // Double click detection with proper timing
-  const lastClickTime = useRef(0);
-
-  const handleClick = (event: React.MouseEvent) => {
-    console.log('Node click handler called for node:', id);
-    event.stopPropagation();
-    
-    const now = Date.now();
-    const timeDiff = now - lastClickTime.current;
-    
-    // If clicks are within double-click threshold (300ms), treat as double-click
-    if (timeDiff < 300 && timeDiff > 0) {
-      console.log('Manual double click detected on node:', id);
-      setIsEditing(true);
-      // Emit edit start event
-      document.dispatchEvent(new CustomEvent('nodeEditStart'));
-      lastClickTime.current = 0; // Reset to prevent triple-click
-    } else {
-      lastClickTime.current = now;
-      console.log('Single click on node:', id);
-    }
-  };
-
+  // Simplified double click detection
   const handleDoubleClick = (event: React.MouseEvent) => {
-    console.log('Native double click handler called for node:', id);
     event.stopPropagation();
     event.preventDefault();
     
@@ -123,7 +99,6 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   };
 
   const handleMouseDown = (event: React.MouseEvent) => {
-    console.log('Mouse down on node:', id);
     event.stopPropagation();
   };
 
@@ -134,7 +109,6 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     
     if (data.onChange) {
       data.onChange(text);
-      console.log("text", text);
     }
   };
 
@@ -146,7 +120,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   return (
     <div
       className={cn(
-        "px-4 py-2 shadow-md rounded-md bg-white border-2 border-stone-400 transition-all duration-200 nopan",
+        "px-4 py-2 shadow-md rounded-md bg-white border-2 border-border transition-all duration-200 nopan relative group",
         isExpanded ? "w-[600px]" : "w-[200px]",
         !isExpanded && !isEditing && "max-h-[160px] overflow-hidden"
       )}
@@ -156,7 +130,6 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         borderWidth: data.style?.borderWidth || 2,
         fontSize: data.style?.fontSize || 14,
       }}
-      onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onMouseDown={handleMouseDown}
     >
@@ -164,18 +137,27 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         type="target"
         position={Position.Left}
         isConnectable={isConnectable}
-        className="w-2 h-2 !bg-stone-400"
+        className="w-2 h-2 !bg-border"
       />
+      
+      {/* Improved expand/collapse button with better positioning */}
+      {!isEditing && shouldShowExpand && (
+        <button
+          onClick={toggleExpand}
+          className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-white border border-border hover:border-border rounded-full z-10 transition-all duration-150 opacity-0 group-hover:opacity-100"
+          title={isExpanded ? "Recolher" : "Expandir"}
+          aria-label={isExpanded ? "Recolher nota" : "Expandir nota"}
+        >
+          {isExpanded ? (
+            <ChevronLeft size={14} />
+          ) : (
+            <ChevronRight size={14} />
+          )}
+        </button>
+      )}
+
       {isEditing ? (
         <div className="relative">
-          {/* TODO: Fix scroll behavior in edit mode
-           * Current issue: ReactFlow captures scroll events before they reach the textarea
-           * Potential solutions to try:
-           * 1. Use a custom scroll container with higher z-index
-           * 2. Implement a custom scroll handler that prevents default on ReactFlow
-           * 3. Use a portal to render the textarea outside of ReactFlow's event system
-           * 4. Add a transparent overlay that captures scroll events
-           */}
           <textarea
             ref={textareaRef}
             value={text}
@@ -184,37 +166,17 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
             className={cn(
               "w-full font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900",
               isExpanded ? "min-h-[200px]" : "min-h-[100px]",
-              "overflow-consistent max-h-[500px]"
+              "overflow-auto max-h-[500px]"
             )}
             style={{
               fontSize: data.style?.fontSize || 14,
             }}
             autoFocus
-            onMouseEnter={(e) => {
-              e.currentTarget.style.overflowY = "auto";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.overflowY = "hidden";
-            }}
+            aria-label="Editar conteúdo da nota"
           />
         </div>
       ) : (
         <div className="relative">
-          {/* Botão de expand/collapse no topo direito */}
-          {!isEditing && shouldShowExpand && (
-            <button
-              onClick={toggleExpand}
-              className="absolute top-1 right-1 p-1 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-full z-10"
-              title={isExpanded ? "Recolher" : "Expandir"}
-              style={{ lineHeight: 0 }}
-            >
-              {isExpanded ? (
-                <ChevronLeft size={18} />
-              ) : (
-                <ChevronRight size={18} />
-              )}
-            </button>
-          )}
           <div
             ref={contentRef}
             className="prose prose-sm max-w-none text-gray-900"
@@ -286,7 +248,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         type="source"
         position={Position.Right}
         isConnectable={isConnectable}
-        className="w-2 h-2 !bg-stone-400"
+        className="w-2 h-2 !bg-border"
       />
     </div>
   );

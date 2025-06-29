@@ -13,8 +13,7 @@ import "reactflow/dist/style.css";
 
 import { MindmapNode } from "./Node";
 import { MindmapEdge } from "./Edge";
-import { Toolbar } from "./Toolbar";
-import { BulkOperationsToolbar } from "./BulkOperationsToolbar";
+import { MindmapToolbar } from "./MindmapToolbar";
 import { MindmapNodeData, Priority, WorkflowStatus } from "../../../types/mindmap";
 import { 
   bulkToggleNodesPinned, 
@@ -81,55 +80,27 @@ export function EditorMindmap({
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
   const { toast } = useToast();
 
-  // Debug: log changes in nodes array
-  useEffect(() => {
-    console.log(`[EDITOR] Nodes array updated:`, nodes.length, nodes.map(n => ({ id: n.id, content: n.data.content })));
-  }, [nodes]);
-
-  // Force ReactFlow refresh only when needed (multi-selection or editing)
+  // Simplified ReactFlow refresh logic
   const [reactFlowKey, setReactFlowKey] = useState(0);
   const [isEditingAny, setIsEditingAny] = useState(false);
-  const prevNodesPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   
+  // Track selection clearing after position changes
   useEffect(() => {
-    const currentPositions = new Map(nodes.map(node => [node.id, node.position]));
-    
-    // Check if any node positions have changed
-    let positionsChanged = false;
-    currentPositions.forEach((currentPos, nodeId) => {
-      const prevPos = prevNodesPositions.current.get(nodeId);
-      if (prevPos && (prevPos.x !== currentPos.x || prevPos.y !== currentPos.y)) {
-        positionsChanged = true;
-        console.log(`[EDITOR] Node ${nodeId} position changed from (${prevPos.x}, ${prevPos.y}) to (${currentPos.x}, ${currentPos.y})`);
-      }
-    });
-    
-    // Only force ReactFlow refresh if positions changed AND we have multi-selection or editing
-    if (positionsChanged && (selectedNodes.length > 1 || isEditingAny)) {
-      console.log('[EDITOR] Node positions changed with multi-selection or editing, forcing ReactFlow refresh');
-      setSelectedNodes([]);
-      setSelectedEdges([]);
-      setReactFlowKey(prev => prev + 1);
-    } else if (positionsChanged && selectedNodes.length > 0) {
-      // Just clear selection for single node movements to avoid stale selection
-      console.log('[EDITOR] Node positions changed, clearing selection without re-render');
+    // Clear selection when nodes array changes significantly (additions/deletions)
+    // but not for position-only changes
+    if (selectedNodes.length > 1 || isEditingAny) {
       setSelectedNodes([]);
       setSelectedEdges([]);
     }
-    
-    // Update previous positions
-    prevNodesPositions.current = currentPositions;
-  }, [nodes, selectedNodes.length, isEditingAny]);
+  }, [nodes.length, isEditingAny]);
 
   // Handle node selection
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    console.log('[EDITOR] ReactFlow onNodeClick called for node:', node.id);
     setSelectedNode(node);
   }, []);
 
   // Handle node double click
   const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node) => {
-    console.log('[EDITOR] ReactFlow onNodeDoubleClick called for node:', node.id);
     event.stopPropagation();
     event.preventDefault();
     
@@ -140,7 +111,6 @@ export function EditorMindmap({
     setTimeout(() => {
       const nodeElement = document.querySelector(`[data-id="${node.id}"]`);
       if (nodeElement) {
-        console.log('[EDITOR] Dispatching triggerEdit event for node:', node.id);
         const editEvent = new CustomEvent('triggerEdit', { detail: { nodeId: node.id } });
         nodeElement.dispatchEvent(editEvent);
       }
@@ -150,12 +120,10 @@ export function EditorMindmap({
   // Listen for edit start/stop events from nodes
   useEffect(() => {
     const handleEditStart = () => {
-      console.log('[EDITOR] Edit mode started');
       setIsEditingAny(true);
     };
     
     const handleEditStop = () => {
-      console.log('[EDITOR] Edit mode stopped');
       setIsEditingAny(false);
     };
 
@@ -178,17 +146,13 @@ export function EditorMindmap({
   const onSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
     setSelectedNodes(selectedNodes);
     setSelectedEdges(selectedEdges);
-    console.log('[EDITOR] Selection changed:', selectedNodes.length, 'nodes,', selectedEdges.length, 'edges');
   }, []);
 
-  // Handle node changes - pass through to hook (debounce is now handled there)
+  // Handle node changes - simplified
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    // Check if any position changes occurred
+    // Clear selection after position changes to avoid stale selection
     const hasPositionChanges = changes.some(change => change.type === 'position');
-    
-    // Clear selection after position changes to avoid stale position selection issues
     if (hasPositionChanges && selectedNodes.length > 0) {
-      console.log('[EDITOR] Position changes detected, clearing selection to prevent stale position bugs');
       setSelectedNodes([]);
       setSelectedEdges([]);
     }
@@ -304,20 +268,9 @@ export function EditorMindmap({
 
   return (
     <div className="h-full relative">
-      <BulkOperationsToolbar
-        selectedCount={selectedNodes.length}
-        onClearSelection={clearSelection}
-        onBulkPin={handleBulkPin}
-        onBulkUnpin={handleBulkUnpin}
-        onBulkArchive={handleBulkArchive}
-        onBulkUnarchive={handleBulkUnarchive}
-        onBulkDelete={handleBulkDelete}
-        onBulkPriorityChange={handleBulkPriorityChange}
-        onBulkWorkflowChange={handleBulkWorkflowChange}
-      />
-
       <div className="absolute top-4 right-4 z-10">
-        <Toolbar
+        <MindmapToolbar
+          // Basic toolbar props
           onAddNode={handleAddNode}
           onAddProjectNode={handleAddProjectNode}
           onStyleChange={handleStyleChange}
@@ -326,6 +279,17 @@ export function EditorMindmap({
           selectedEdge={null}
           currentProjectId={projectId}
           onAutoOrganize={onAutoOrganize}
+          
+          // Bulk operations props
+          selectedCount={selectedNodes.length}
+          onClearSelection={clearSelection}
+          onBulkPin={handleBulkPin}
+          onBulkUnpin={handleBulkUnpin}
+          onBulkArchive={handleBulkArchive}
+          onBulkUnarchive={handleBulkUnarchive}
+          onBulkDelete={handleBulkDelete}
+          onBulkPriorityChange={handleBulkPriorityChange}
+          onBulkWorkflowChange={handleBulkWorkflowChange}
         />
       </div>
       <ReactFlow

@@ -101,13 +101,13 @@ export function BulkOperationsToolbar({
   // Render inline version (Gmail-style)
   if (variant === "inline") {
     return (
-             <div className={`w-full bg-primary/5 border border-primary/20 rounded-lg p-3 animate-slideDown ${className}`}>
+             <div className={`w-full bg-black/20 backdrop-blur-md border border-border rounded-lg p-3 animate-slideDown shadow-xl ${className}`}>
          <div className="flex items-center justify-between gap-3 flex-wrap">
            {/* Left side - Counter, actions and workflow controls */}
            <div className="flex items-center gap-3 flex-wrap">
-             <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full">
+             <div className="flex items-center gap-2 px-3 py-1 bg-primary/30 backdrop-blur-sm rounded-full border border-border">
                <span className="text-sm font-medium text-primary">{selectedCount}</span>
-               <span className="text-xs text-muted-foreground">selecionada(s)</span>
+               <span className="text-xs text-white/80">selecionada(s)</span>
              </div>
              
              <div className="flex items-center gap-1">
