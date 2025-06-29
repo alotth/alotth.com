@@ -7,8 +7,8 @@ export default function AdminLayout({
 }) {
   return (
     <AuthGuard>
-      <div className="h-full overflow-consistent">
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-consistent">
+      <div className="h-full">
+        <main className="h-full pt-4 px-4 sm:px-6 lg:px-8 overflow-hidden">
           {children}
         </main>
       </div>

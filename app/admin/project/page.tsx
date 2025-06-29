@@ -1,9 +1,9 @@
 "use client";
 
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { deleteMindmapProject, getMindmapProjects, getProjectOverview, upsertProjectOverviewNodes, upsertProjectOverviewEdges, deleteProjectOverviewEdge, createMindmapProject, importMindmapProjects, toggleProjectPinned, toggleProjectArchived, deleteAllMindmapProjects } from "@/lib/mindmap";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { deleteMindmapProject, getMindmapProjects, getProjectOverview, upsertProjectOverviewNodes, upsertProjectOverviewEdges, deleteProjectOverviewEdge, createMindmapProject, importMindmapProjects, toggleProjectPinned, toggleProjectArchived, deleteAllMindmapProjects, updateMindmapNodes, getAllNotes, getNotesCount, createProjectNode } from "@/lib/mindmap";
 import { MindmapProject } from "@/types/mindmap";
 import ReactFlow, {
   Node as FlowNode,
@@ -21,7 +21,7 @@ import ReactFlow, {
   Position,
 } from "reactflow";
 import "reactflow/dist/style.css";
-import { ExternalLink, ChevronRight, ChevronLeft, Edit2, Pin, Archive, PinOff, ArchiveRestore } from "lucide-react";
+import { ExternalLink, ChevronRight, ChevronLeft, Edit2, Pin, Archive, PinOff, ArchiveRestore, Save, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
@@ -31,7 +31,115 @@ import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { NotesView } from "@/components/admin/mindmap/NotesView";
-import { getAllNotes } from "@/lib/mindmap";
+import { MultiSelect } from "@/components/ui/multi-select";
+import { PrioritySelect } from "@/components/ui/priority-select";
+import { WorkflowSelect } from "@/components/ui/workflow-select";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Priority, WorkflowStatus, NoteWithProject } from "@/types/mindmap";
+import { v4 as uuidv4 } from "uuid";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+// QuickCreateNote component for main page
+interface QuickCreateNoteProps {
+  newNoteText: string;
+  setNewNoteText: (text: string) => void;
+  saveNewNote: (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null, targetProjectIds?: string[]) => void;
+  projects: MindmapProject[];
+}
+
+const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
+  newNoteText,
+  setNewNoteText,
+  saveNewNote,
+  projects,
+}) => {
+  const [priority, setPriority] = useState<Priority | null>(null);
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus | null>(null);
+  const [dueDate, setDueDate] = useState<string | null>(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+
+  // Set first project as default on mount
+  useEffect(() => {
+    if (projects.length > 0 && selectedProjectIds.length === 0) {
+      setSelectedProjectIds([projects[0].id]);
+    }
+  }, [projects, selectedProjectIds.length]);
+
+  const handleSave = async () => {
+    if (newNoteText.trim() === "") return;
+    
+    // Use first project if none selected
+    const targetIds = selectedProjectIds.length > 0 ? selectedProjectIds : [projects[0]?.id].filter(Boolean);
+    
+    await saveNewNote(priority, workflowStatus, dueDate, targetIds);
+    // Reset form but keep first project selected
+    setPriority(null);
+    setWorkflowStatus(null);
+    setDueDate(null);
+    setSelectedProjectIds([projects[0]?.id].filter(Boolean));
+  };
+
+  const handleCancel = () => {
+    setNewNoteText("");
+    setPriority(null);
+    setWorkflowStatus(null);
+    setDueDate(null);
+    setSelectedProjectIds([projects[0]?.id].filter(Boolean));
+  };
+
+  const projectOptions = projects.map(project => ({
+    label: project.title,
+    value: project.id
+  }));
+
+  return (
+    <div className="mb-4 sm:mb-6 w-full min-w-[100px] max-w-[600px]">
+      <div className="p-2 rounded-lg border bg-card text-card-foreground transition-all duration-200">
+        <div className="space-y-2">
+          <MarkdownEditor
+            value={newNoteText}
+            onChange={setNewNoteText}
+            placeholder="Create a new note..."
+            extraControls={
+              <div className="flex items-center gap-1">
+                <MultiSelect
+                  options={projectOptions}
+                  selected={selectedProjectIds}
+                  onChange={setSelectedProjectIds}
+                  className="w-[80px] h-6"
+                />
+                <PrioritySelect
+                  value={priority}
+                  onValueChange={setPriority}
+                  className="w-[60px] h-6"
+                />
+                <WorkflowSelect
+                  value={workflowStatus}
+                  onValueChange={setWorkflowStatus}
+                  className="w-[60px] h-6"
+                />
+                <DatePicker
+                  value={dueDate}
+                  onValueChange={setDueDate}
+                  placeholder="📅"
+                  className="w-[60px] h-6"
+                />
+                <div className="flex gap-1 ml-2 border-l pl-2">
+                  <Button onClick={handleSave} size="sm" className="h-6 px-2 text-xs" disabled={newNoteText.trim() === ""}>
+                    <Save className="h-3 w-3" />
+                  </Button>
+                  <Button onClick={handleCancel} variant="ghost" size="sm" className="h-6 px-1 text-xs" disabled={newNoteText.trim() === "" && !priority && !workflowStatus && !dueDate}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            }
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function MindmapPage() {
   const [projects, setProjects] = useState<MindmapProject[]>([]);
@@ -41,6 +149,151 @@ export default function MindmapPage() {
   const [initializing, setInitializing] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
+  
+  // Notes view state
+  const [newNoteText, setNewNoteText] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredNotes, setFilteredNotes] = useState<NoteWithProject[]>([]); // For main notes view
+  const [searchResults, setSearchResults] = useState<NoteWithProject[]>([]); // For search component
+  const [totalNotesCount, setTotalNotesCount] = useState(0); // Total count for pagination
+  const [page, setPage] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const NOTES_PER_PAGE = 20;
+
+  // Calculate if we have more notes to load
+  const hasMore = useMemo(() => {
+    // If we have a search query, getAllNotes returns all search results at once
+    // So there are no more results to load in search mode
+    if (searchQuery.trim()) {
+      return false;
+    }
+    
+    // For normal mode (no search), check if we have more pages to load based on total count
+    const currentlyLoaded = (page + 1) * NOTES_PER_PAGE;
+    const result = totalNotesCount > currentlyLoaded;
+    console.log('🔄 hasMore calculated:', {
+      totalNotesCount,
+      currentlyLoaded,
+      page,
+      NOTES_PER_PAGE,
+      hasMore: result
+    });
+    return result;
+  }, [totalNotesCount, page, searchQuery]);
+
+  // Load more notes handler
+  const handleLoadMore = useCallback(async () => {
+    console.log('🔄 handleLoadMore called with:', {
+      loadingMore,
+      hasMore,
+      searchQuery: searchQuery.trim(),
+      page,
+      totalNotesCount,
+      filteredNotesLength: filteredNotes.length
+    });
+    
+    // Don't load more if there's a search query active (search returns all results at once)
+    if (loadingMore || !hasMore || searchQuery.trim()) {
+      console.log('❌ handleLoadMore blocked:', { loadingMore, hasMore, searchQuery: searchQuery.trim() });
+      return;
+    }
+    
+    setLoadingMore(true);
+    
+    try {
+      const nextPage = page + 1;
+      const offset = nextPage * NOTES_PER_PAGE;
+      
+      console.log('📊 Loading more notes with pagination:', { nextPage, offset, limit: NOTES_PER_PAGE });
+      
+      const moreNotes = await getAllNotes(undefined, {
+        limit: NOTES_PER_PAGE,
+        offset: offset
+      });
+      
+      console.log('✅ More notes loaded from DB:', moreNotes.length);
+      
+      if (moreNotes.length > 0) {
+        setFilteredNotes(prev => [...prev, ...moreNotes]);
+        setPage(nextPage);
+        console.log('✅ Notes added to state, new page:', nextPage);
+      } else {
+        console.log('❌ No more notes returned from DB');
+      }
+    } catch (error) {
+      console.error('❌ Error loading more notes:', error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, page, NOTES_PER_PAGE, searchQuery]);
+
+  // Initialize notes
+  useEffect(() => {
+    const loadInitialNotes = async () => {
+      try {
+        console.log('📚 Loading initial notes with pagination...');
+        
+        // Load first page of notes and total count in parallel
+        const [initialNotes, totalCount] = await Promise.all([
+          getAllNotes(undefined, { limit: NOTES_PER_PAGE, offset: 0 }),
+          getNotesCount()
+        ]);
+        
+        console.log('📚 Initial data loaded:', {
+          notesLoaded: initialNotes.length,
+          totalCount,
+          NOTES_PER_PAGE
+        });
+        
+        setTotalNotesCount(totalCount);
+        setFilteredNotes(initialNotes);
+        setPage(0);
+        
+        console.log('📚 Initial notes state set:', {
+          totalNotesCount: totalCount,
+          initialFiltered: initialNotes.length,
+          hasMore: totalCount > NOTES_PER_PAGE
+        });
+      } catch (error) {
+        console.error("❌ Error loading initial notes:", error);
+        toast({
+          title: "Erro ao carregar notas",
+          description: "Não foi possível carregar as notas. Por favor, tente novamente.",
+          variant: "destructive"
+        });
+      }
+    };
+    
+    console.log('🚀 useEffect triggered for loadInitialNotes');
+    loadInitialNotes();
+  }, [NOTES_PER_PAGE, toast]);
+
+  // Handle search
+  const handleSearch = useCallback(async (query: string) => {
+    setSearchQuery(query);
+    
+    if (!query.trim()) {
+      setSearchResults([]); // Clear search results when no search
+      return;
+    }
+
+    try {
+      const searchResults = await getAllNotes(query);
+      setSearchResults(searchResults);
+    } catch (error) {
+      console.error("Error searching notes:", error);
+      toast({
+        title: "Erro ao pesquisar notas",
+        description: "Não foi possível realizar a pesquisa. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+    }
+  }, [toast]);
+
+  // Handle filtered notes change from search component
+  const handleFilteredNotesChange = useCallback((notes: NoteWithProject[]) => {
+    setSearchResults(notes);
+  }, []);
 
   // Markdown components configuration
   const markdownComponents: Components = {
@@ -718,6 +971,113 @@ export default function MindmapPage() {
     setEditModalOpen(true);
   };
 
+  // Create note in project function
+  const createNoteInProject = async (nodeData: any, targetProjectId: string) => {
+    try {
+      const supabase = createClientComponentClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      await updateMindmapNodes({
+        projectId: targetProjectId,
+        nodes: [nodeData],
+      });
+    } catch (error) {
+      console.error(`Error creating note in project ${targetProjectId}:`, error);
+      throw error;
+    }
+  };
+
+  // Save new note function
+  const saveNewNote = async (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null, targetProjectIds?: string[]) => {
+    if (newNoteText.trim() === "" || !targetProjectIds || targetProjectIds.length === 0) {
+      return;
+    }
+    
+    try {
+      const nodeId = uuidv4();
+      const nodeData = {
+        id: nodeId,
+        position: { x: 100, y: 100 },
+        data: {
+          content: newNoteText,
+          style: {
+            backgroundColor: "#ffffff",
+            borderColor: "#000000",
+            borderWidth: 2,
+            fontSize: 14,
+          },
+          priority: priority || null,
+          workflowStatus: workflowStatus || null,
+          dueDate: dueDate || null,
+        },
+      };
+
+      // Create note in all selected projects
+      for (const projectId of targetProjectIds) {
+        await createNoteInProject(nodeData, projectId);
+      }
+      
+      setNewNoteText("");
+      
+      toast({
+        title: "✅ Nota criada",
+        description: `Nota criada em ${targetProjectIds.length} projeto(s)`,
+        duration: 3000,
+      });
+    } catch (err) {
+      console.error("Failed to create note", err);
+      toast({
+        title: "❌ Erro",
+        description: "Não foi possível criar a nota",
+        variant: "destructive",
+        duration: 3000,
+      });
+    }
+  };
+
+  // Memoized NotesView components
+  const SearchNotesView = useMemo(() => (
+    <NotesView 
+      searchOnly 
+      onSearchChange={handleSearch}
+      onFilteredNotesChange={handleFilteredNotesChange}
+      searchQuery={searchQuery}
+      filteredNotes={searchQuery.trim() ? searchResults : []}
+      hasMore={false}
+      loadingMore={false}
+      onLoadMore={() => {}}
+    />
+  ), [handleSearch, handleFilteredNotesChange, searchQuery, searchResults]);
+
+  const MainNotesView = useMemo(() => {
+    // Use search results when there's an active search, otherwise use main filtered notes
+    const notesToShow = searchQuery.trim() ? searchResults : filteredNotes;
+    const hasMoreNotes = searchQuery.trim() ? false : hasMore; // No pagination for search results
+    
+    return (
+      <NotesView 
+        notesOnly 
+        searchQuery={searchQuery} // Pass the search query to show proper context
+        filteredNotes={notesToShow} // Use correct notes based on search state
+        onLoadMore={searchQuery.trim() ? () => {} : handleLoadMore} // Disable load more for search
+        hasMore={hasMoreNotes}
+        loadingMore={searchQuery.trim() ? false : loadingMore} // No loading for search
+      />
+    );
+  }, [filteredNotes, searchResults, searchQuery, handleLoadMore, hasMore, loadingMore]);
+
+  // Debug state changes
+  useEffect(() => {
+    console.log('📊 State updated:', {
+      totalNotesCount,
+      filteredNotesLength: filteredNotes.length,
+      page,
+      hasMore,
+      searchQuery
+    });
+  }, [totalNotesCount, filteredNotes.length, page, hasMore, searchQuery]);
+
   if (initializing) {
     return (
       <div className="flex items-center justify-center h-[70vh]">
@@ -727,175 +1087,215 @@ export default function MindmapPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">Mindmap</h1>
-
-      {/* View type selector */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
-        <Button
-          variant={viewType === "list" ? "default" : "outline"}
-          onClick={() => setViewType("list")}
-          className="whitespace-nowrap text-sm"
-        >
-          List View
-        </Button>
-        <Button
-          variant={viewType === "mindmap" ? "default" : "outline"}
-          onClick={() => setViewType("mindmap")}
-          className="whitespace-nowrap text-sm"
-        >
-          Mindmap View
-        </Button>
-        <Button
-          variant={viewType === "notes" ? "default" : "outline"}
-          onClick={() => setViewType("notes")}
-          className="whitespace-nowrap text-sm"
-        >
-          Notes View
-        </Button>
+    <div className="h-full flex flex-col">
+      {/* Header with title and view selectors */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 sm:mb-6 flex-shrink-0">
+        <h1 className="text-xl sm:text-2xl font-bold">Mindmap</h1>
+        
+        {/* View type selector */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+          <Button
+            variant={viewType === "list" ? "default" : "outline"}
+            onClick={() => setViewType("list")}
+            className="whitespace-nowrap text-sm"
+          >
+            List View
+          </Button>
+          <Button
+            variant={viewType === "mindmap" ? "default" : "outline"}
+            onClick={() => setViewType("mindmap")}
+            className="whitespace-nowrap text-sm"
+          >
+            Mindmap View
+          </Button>
+          <Button
+            variant={viewType === "notes" ? "default" : "outline"}
+            onClick={() => setViewType("notes")}
+            className="whitespace-nowrap text-sm"
+          >
+            Notes View
+          </Button>
+        </div>
       </div>
 
-      {viewType === "list" && (
-        <>
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 gap-4">
-            <h2 className="text-lg sm:text-xl font-semibold">Your Projects</h2>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button onClick={() => setShowCreateModal(true)} className="text-sm">Create New Project</Button>
-              <Button variant="outline" onClick={() => setShowImportModal(true)} className="text-sm">Import Projects</Button>
-              {projects.length > 0 && (
-                <Button 
-                  variant="destructive" 
-                  onClick={deleteAllProjects} 
-                  className="text-sm"
-                  title="Excluir todos os projetos"
-                >
-                  Delete All Projects
-                </Button>
-              )}
+      {/* Content area - takes remaining height */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {viewType === "list" && (
+          <div className="h-full flex flex-col">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 sm:mb-6 gap-4 flex-shrink-0">
+              <h2 className="text-lg sm:text-xl font-semibold">Your Projects</h2>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button onClick={() => setShowCreateModal(true)} className="text-sm">Create New Project</Button>
+                <Button variant="outline" onClick={() => setShowImportModal(true)} className="text-sm">Import Projects</Button>
+                {projects.length > 0 && (
+                  <Button 
+                    variant="destructive" 
+                    onClick={deleteAllProjects} 
+                    className="text-sm"
+                    title="Excluir todos os projetos"
+                  >
+                    Delete All Projects
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 min-h-full pb-4">
+                {projects?.map((project) => (
+                  <div
+                    key={project.id}
+                    className={`block p-3 sm:p-4 border rounded-lg hover:border-primary transition-colors relative ${
+                      project.is_archived ? 'opacity-60 bg-muted/30' : ''
+                    }`}
+                  >
+                    {/* Pin/Archive status indicators */}
+                    <div className="absolute top-2 left-2 flex gap-1">
+                      {project.is_pinned && (
+                        <div className="bg-primary text-primary-foreground rounded-full p-1">
+                          <Pin size={12} />
+                        </div>
+                      )}
+                      {project.is_archived && (
+                        <div className="bg-muted text-muted-foreground rounded-full p-1">
+                          <Archive size={12} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => handleTogglePinned(project.id, e)}
+                        title={project.is_pinned ? "Desafixar" : "Fixar"}
+                      >
+                        {project.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={(e) => handleToggleArchived(project.id, e)}
+                        title={project.is_archived ? "Desarquivar" : "Arquivar"}
+                      >
+                        {project.is_archived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
+                      </Button>
+                    </div>
+
+                    <Link href={`/admin/project/${project.id}`} className="block group">
+                      <h3 className={`font-medium mb-2 text-sm sm:text-base ${
+                        project.is_archived ? 'text-muted-foreground' : ''
+                      }`}>
+                        {project.title}
+                      </h3>
+                      <div className="relative">
+                        {project.description && (
+                          <div className="text-sm text-muted-foreground mb-2 group/desc">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-0 top-0 opacity-0 group-hover/desc:opacity-100 transition-opacity h-6 w-6"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleEdit(project.id, project.description || '');
+                              }}
+                            >
+                              <Edit2 className="h-3 w-3" />
+                            </Button>
+                            <ReactMarkdown 
+                              className="prose dark:prose-invert prose-sm max-w-none"
+                              components={markdownComponents}
+                            >
+                              {project.description}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Created {new Date(project.created_at).toLocaleDateString()}
+                      </div>
+                    </Link>
+                    <Button
+                      variant="destructive"
+                      onClick={() => deleteProject(project.id)}
+                      className="mt-2 w-full sm:w-auto text-sm"
+                      size="sm"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                ))}
+
+                {projects?.length === 0 && (
+                  <div className="col-span-full text-center py-8 text-muted-foreground">
+                    No mindmaps yet. Create your first one!
+                  </div>
+                )}
+              </div>
             </div>
           </div>
+        )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {projects?.map((project) => (
-              <div
-                key={project.id}
-                className={`block p-3 sm:p-4 border rounded-lg hover:border-primary transition-colors relative ${
-                  project.is_archived ? 'opacity-60 bg-muted/30' : ''
-                }`}
-              >
-                {/* Pin/Archive status indicators */}
-                <div className="absolute top-2 left-2 flex gap-1">
-                  {project.is_pinned && (
-                    <div className="bg-primary text-primary-foreground rounded-full p-1">
-                      <Pin size={12} />
-                    </div>
-                  )}
-                  {project.is_archived && (
-                    <div className="bg-muted text-muted-foreground rounded-full p-1">
-                      <Archive size={12} />
-                    </div>
-                  )}
-                </div>
-
-                {/* Action buttons */}
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => handleTogglePinned(project.id, e)}
-                    title={project.is_pinned ? "Desafixar" : "Fixar"}
-                  >
-                    {project.is_pinned ? <PinOff size={12} /> : <Pin size={12} />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={(e) => handleToggleArchived(project.id, e)}
-                    title={project.is_archived ? "Desarquivar" : "Arquivar"}
-                  >
-                    {project.is_archived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
-                  </Button>
-                </div>
-
-                <Link href={`/admin/project/${project.id}`} className="block group">
-                  <h3 className={`font-medium mb-2 text-sm sm:text-base ${
-                    project.is_archived ? 'text-muted-foreground' : ''
-                  }`}>
-                    {project.title}
-                  </h3>
-                  <div className="relative">
-                    {project.description && (
-                      <div className="text-sm text-muted-foreground mb-2 group/desc">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 opacity-0 group-hover/desc:opacity-100 transition-opacity h-6 w-6"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleEdit(project.id, project.description || '');
-                          }}
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                        <ReactMarkdown 
-                          className="prose dark:prose-invert prose-sm max-w-none"
-                          components={markdownComponents}
-                        >
-                          {project.description}
-                        </ReactMarkdown>
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Created {new Date(project.created_at).toLocaleDateString()}
-                  </div>
-                </Link>
-                <Button
-                  variant="destructive"
-                  onClick={() => deleteProject(project.id)}
-                  className="mt-2 w-full sm:w-auto text-sm"
-                  size="sm"
-                >
-                  Delete
-                </Button>
-              </div>
-            ))}
-
-            {projects?.length === 0 && (
-              <div className="col-span-full text-center py-8 text-muted-foreground">
-                No mindmaps yet. Create your first one!
-              </div>
-            )}
+        {viewType === "mindmap" && (
+          <div className="h-full border rounded">
+            <ReactFlow
+              nodes={flowNodes}
+              edges={flowEdges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              nodeTypes={nodeTypes}
+              fitView
+              fitViewOptions={{ padding: 0.2 }}
+              minZoom={0.1}
+              maxZoom={2}
+            >
+              <Background />
+              <Controls />
+            </ReactFlow>
           </div>
-        </>
-      )}
+        )}
 
-      {viewType === "mindmap" && (
-        <div className="h-[60vh] sm:h-[70vh] border rounded">
-          <ReactFlow
-            nodes={flowNodes}
-            edges={flowEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            nodeTypes={nodeTypes}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
-            minZoom={0.1}
-            maxZoom={2}
-          >
-            <Background />
-            <Controls />
-          </ReactFlow>
-        </div>
-      )}
+        {viewType === "notes" && (
+          <div className="h-full flex flex-col">
+            {/* Sticky header row with title, QuickCreateNote and Search */}
+            <div className="sticky top-0 z-10 bg-transparent backdrop-blur-sm flex-shrink-0">
+              <div className="p-3 sm:p-6">
+                <div className="flex flex-row items-start gap-4 justify-between">
+                  <div className="flex-1 flex justify-center min-w-0">
+                    <QuickCreateNote
+                      newNoteText={newNoteText}
+                      setNewNoteText={setNewNoteText}
+                      saveNewNote={saveNewNote}
+                      projects={projects}
+                    />
+                  </div>
+                  
+                  <div className="w-80 hidden sm:block">
+                    {SearchNotesView}
+                  </div>
+                </div>
+                
+                {/* Mobile search - shown below on small screens */}
+                <div className="mt-4 sm:hidden">
+                  {SearchNotesView}
+                </div>
+              </div>
+            </div>
 
-      {viewType === "notes" && (
-        <NotesView className="mt-4" />
-      )}
+            {/* Scrollable notes area */}
+            <div className="flex-1 min-h-0 overflow-auto">
+              <div className="p-3 sm:p-6">
+                {MainNotesView}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Modals */}
       <CreateProjectModal

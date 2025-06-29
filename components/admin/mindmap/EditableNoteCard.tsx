@@ -20,6 +20,7 @@ interface EditableNoteCardPropsWithProject {
   note: NoteWithProject;
   onUpdate: (updatedNote: NoteWithProject) => void;
   onRemove: (noteId: string, projectId: string) => void;
+  onSelect?: (event: React.MouseEvent) => void;
   hideProjectSelector?: never;
 }
 
@@ -40,6 +41,7 @@ interface EditableNoteCardPropsWithoutProject {
   onWorkflowStatusChange?: (id: string, status: WorkflowStatus) => void;
   onDueDateChange?: (id: string, dueDate: string | null) => void;
   onRemove?: (nodeId: string, projectId: string) => void;
+  onSelect?: (event: React.MouseEvent) => void;
   hideProjectSelector: true;
   note?: never;
   onUpdate?: never;
@@ -64,7 +66,8 @@ const markdownComponents = {
 
 export function EditableNoteCard(props: EditableNoteCardProps) {
   // Normalize props based on usage mode
-  const isProjectMode = props.hideProjectSelector === true;
+  // Force correct mode detection: if we have a note prop, we're in NotesView mode
+  const isProjectMode = props.hideProjectSelector === true && !props.note;
   
   const noteId = isProjectMode ? props.id : props.note.id;
   const noteContent = isProjectMode ? props.content : props.note.content;
@@ -124,6 +127,7 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
         if ((event.target as HTMLElement).closest('[data-radix-select-content]')) {
           return;
         }
+        console.log('[NOTE CARD] Click outside detected, cancelling edit');
         handleCancel();
       }
     };
@@ -139,7 +143,15 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
     };
   }, [isEditing, handleCancel, isSelectOpen]);
 
-  const handleOnClick = () => {
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent parent from handling this event
+    if (!isEditing) {
+      setIsEditing(true);
+    }
+  };
+
+  const handleSingleClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent parent from handling this event
     if (!isEditing) {
       setIsEditing(true);
     }
@@ -254,27 +266,38 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
   const handleSave = async () => {
     setLoading(true);
     try {
-      // Check if we need to update content
-      if (content !== noteContent) {
-        await updateNoteContent(noteId, content);
-        
-        if (isProjectMode) {
+      if (isProjectMode) {
+        // In project mode, use the unified updateNode flow from useMindmap hook
+        // This avoids duplicate saves and race conditions
+        if (content !== noteContent) {
           props.onContentChange(noteId, content);
         }
-      }
-
-      // Check if we need to update metadata (priority, workflow, due_date)
-      if (priority !== notePriority || workflowStatus !== noteWorkflowStatus || dueDate !== noteDueDate) {
-        await updateNoteMetadata(noteId, {
-          priority,
-          workflow_status: workflowStatus,
-          due_date: dueDate
-        });
         
-        if (isProjectMode) {
+        if (priority !== notePriority) {
           props.onPriorityChange?.(noteId, priority!);
+        }
+        
+        if (workflowStatus !== noteWorkflowStatus) {
           props.onWorkflowStatusChange?.(noteId, workflowStatus!);
+        }
+        
+        if (dueDate !== noteDueDate) {
           props.onDueDateChange?.(noteId, dueDate);
+        }
+      } else {
+        // In notes view mode, save directly to database as before
+        // Check if we need to update content
+        if (content !== noteContent) {
+          await updateNoteContent(noteId, content);
+        }
+
+        // Check if we need to update metadata (priority, workflow, due_date)
+        if (priority !== notePriority || workflowStatus !== noteWorkflowStatus || dueDate !== noteDueDate) {
+          await updateNoteMetadata(noteId, {
+            priority,
+            workflow_status: workflowStatus,
+            due_date: dueDate
+          });
         }
       }
 
@@ -342,7 +365,25 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
         isEditing && "ring-2 ring-primary cursor-default",
         !isExpanded && !isEditing && "max-h-[300px] overflow-hidden"
       )}
-      onClick={!isEditing ? handleOnClick : undefined}
+      onDoubleClick={!isEditing ? handleDoubleClick : undefined}
+      onClick={!isEditing ? handleSingleClick : undefined}
+      onMouseDown={(e) => {
+        // Check if clicking on interactive elements
+        const target = e.target as HTMLElement;
+        const isInteractiveElement = target.closest('button, input, select, textarea, a, [role="button"], .markdown-editor, [contenteditable]');
+        
+        if (isInteractiveElement) {
+          e.stopPropagation();
+        } else if (isEditing) {
+          // If editing, don't handle selection
+          return;
+        } else {
+          // Call the selection callback directly
+          if (props.onSelect) {
+            props.onSelect(e);
+          }
+        }
+      }}
     >
       {/* Status Indicators */}
       <div className="absolute top-2 left-2 flex gap-1 z-10">

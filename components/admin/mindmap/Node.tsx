@@ -75,6 +75,8 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
       if (event.detail.nodeId === id) {
         console.log('[NODE] Custom edit event received for node:', id);
         setIsEditing(true);
+        // Emit edit start event
+        document.dispatchEvent(new CustomEvent('nodeEditStart'));
       }
     };
 
@@ -101,6 +103,8 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     if (timeDiff < 300 && timeDiff > 0) {
       console.log('Manual double click detected on node:', id);
       setIsEditing(true);
+      // Emit edit start event
+      document.dispatchEvent(new CustomEvent('nodeEditStart'));
       lastClickTime.current = 0; // Reset to prevent triple-click
     } else {
       lastClickTime.current = now;
@@ -114,6 +118,8 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     event.preventDefault();
     
     setIsEditing(true);
+    // Emit edit start event
+    document.dispatchEvent(new CustomEvent('nodeEditStart'));
   };
 
   const handleMouseDown = (event: React.MouseEvent) => {
@@ -123,6 +129,9 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
 
   const handleBlur = () => {
     setIsEditing(false);
+    // Emit edit stop event
+    document.dispatchEvent(new CustomEvent('nodeEditStop'));
+    
     if (data.onChange) {
       data.onChange(text);
       console.log("text", text);

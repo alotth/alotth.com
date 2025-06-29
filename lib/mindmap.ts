@@ -1287,7 +1287,15 @@ export async function toggleNodeArchived(nodeId: string): Promise<void> {
 
 // ===================== NOTES VIEW =====================
 
-export async function getAllNotes(searchQuery?: string): Promise<NoteWithProject[]> {
+export async function getAllNotes(
+  searchQuery?: string,
+  options?: {
+    limit?: number;
+    offset?: number;
+    orderBy?: 'created_at' | 'updated_at';
+    orderDirection?: 'asc' | 'desc';
+  }
+): Promise<NoteWithProject[]> {
   const supabase = createClientComponentClient();
   const { data: { session } } = await supabase.auth.getSession();
   
@@ -1295,8 +1303,18 @@ export async function getAllNotes(searchQuery?: string): Promise<NoteWithProject
     throw new Error("Not authenticated");
   }
 
-  // Get all notes with project information
-  const { data, error } = await supabase
+  // If there's a search query, use the API endpoint
+  if (searchQuery) {
+    const response = await fetch(`/api/notes/search?q=${encodeURIComponent(searchQuery)}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to search notes');
+    }
+    return response.json();
+  }
+
+  // Otherwise, use the original implementation for listing/pagination
+  let query = supabase
     .from("mindmap_nodes")
     .select(`
       id,
@@ -1322,6 +1340,21 @@ export async function getAllNotes(searchQuery?: string): Promise<NoteWithProject
       )
     `)
     .eq("mindmap_node_projects.mindmap_projects.user_id", session.user.id);
+
+  // Add ordering
+  const orderBy = options?.orderBy || 'updated_at';
+  const orderDirection = options?.orderDirection || 'desc';
+  query = query.order(orderBy, { ascending: orderDirection === 'asc' });
+
+  // Add pagination
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+  if (options?.offset) {
+    query = query.range(options.offset, options.offset + (options.limit || 20) - 1);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -1351,23 +1384,12 @@ export async function getAllNotes(searchQuery?: string): Promise<NoteWithProject
           updated_at: node.updated_at,
         };
         
-        // Apply search filter if provided
-        if (searchQuery) {
-          const query = searchQuery.toLowerCase();
-          const matchesContent = note.content.toLowerCase().includes(query);
-          const matchesProject = note.project_title.toLowerCase().includes(query);
-          
-          if (matchesContent || matchesProject) {
-            notes.push(note);
-          }
-        } else {
-          notes.push(note);
-        }
+        notes.push(note);
       }
     }
   }
 
-  // Sort notes by pinned, archived, then by date
+  // Sort notes by pinned, archived, then by date (frontend sorting for mixed criteria)
   return notes.sort((a, b) => {
     // First by pinned status (pinned first)
     if (a.is_pinned !== b.is_pinned) {
@@ -1506,4 +1528,90 @@ export async function updateNoteMetadata(nodeId: string, metadata: {
     .eq("id", nodeId);
 
   if (error) throw error;
+}
+
+// Bulk operations for multiple nodes
+export async function bulkToggleNodesPinned(nodeIds: string[]): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  for (const nodeId of nodeIds) {
+    await toggleNodePinned(nodeId);
+  }
+}
+
+export async function bulkToggleNodesArchived(nodeIds: string[]): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  for (const nodeId of nodeIds) {
+    await toggleNodeArchived(nodeId);
+  }
+}
+
+export async function bulkDeleteNodes(nodeIds: string[], projectId: string): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  for (const nodeId of nodeIds) {
+    await deleteMindmapNode(nodeId, projectId);
+  }
+}
+
+export async function bulkUpdateNodesPriority(nodeIds: string[], priority: 'low' | 'medium' | 'high' | null): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  for (const nodeId of nodeIds) {
+    await updateNoteMetadata(nodeId, { priority });
+  }
+}
+
+export async function bulkUpdateNodesWorkflow(nodeIds: string[], workflowStatus: 'todo' | 'in_progress' | 'done' | 'blocked' | null): Promise<void> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  for (const nodeId of nodeIds) {
+    await updateNoteMetadata(nodeId, { workflow_status: workflowStatus });
+  }
+}
+
+// Get total count of notes for pagination
+export async function getNotesCount(searchQuery?: string): Promise<number> {
+  const supabase = createClientComponentClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  try {
+    // Simple solution: use getAllNotes and count results
+    // TODO: Optimize this with a proper count query later
+    const allNotes = await getAllNotes(searchQuery);
+    return allNotes.length;
+  } catch (error) {
+    console.error('Error in getNotesCount:', error);
+    throw error;
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -8,14 +8,36 @@ interface NotesSearchProps {
   onSearch: (query: string) => void;
   placeholder?: string;
   className?: string;
+  enableDebounce?: boolean; // Allow debounce as an option
 }
 
 export function NotesSearch({ 
   onSearch, 
-  placeholder = "Search notes and projects...",
-  className = ""
+  placeholder = "Search notes and projects... (Press Enter to search)",
+  className = "",
+  enableDebounce = false
 }: NotesSearchProps) {
   const [query, setQuery] = useState("");
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounce effect (only if enabled)
+  useEffect(() => {
+    if (!enableDebounce) return;
+    
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      onSearch(query);
+    }, 500); // 500ms debounce
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [query, onSearch, enableDebounce]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +51,8 @@ export function NotesSearch({
 
   const handleChange = (value: string) => {
     setQuery(value);
-    // Real-time search with debouncing would be better, but for now we'll search on submit
+    // Remove real-time search - only search on Enter or if debounce is enabled
+    // Real-time search removed to prevent too many API calls
   };
 
   return (
@@ -55,15 +78,6 @@ export function NotesSearch({
           </Button>
         )}
       </div>
-      
-      {/* Submit button - could be hidden and just submit on Enter */}
-      <Button
-        type="submit"
-        className="mt-2 w-full sm:w-auto"
-        size="sm"
-      >
-        Search
-      </Button>
     </form>
   );
 } 

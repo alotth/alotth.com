@@ -74,6 +74,8 @@ export function useMindmap(projectId: string) {
   const positionSaveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
   // Track click times for double-click detection through position changes
   const lastClickTimes = useRef<Map<string, number>>(new Map());
+  // Debounce text saves to avoid race conditions when typing fast
+  const textSaveTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const getMindmapTitle = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -84,11 +86,11 @@ export function useMindmap(projectId: string) {
     return data?.title;
   }, [projectId, supabase]);
 
-  // Handle text changes
+  // Handle text changes with debounce
   const handleTextChange = useCallback((nodeId: string, newText: string) => {
     console.log(`[HOOK] handleTextChange chamado para node ${nodeId}:`, newText);
     
-    // Update local state first (synchronously)
+    // Update local state immediately (synchronously) for responsive UI
     let updatedNode: Node | null = null;
     console.log(`[HOOK] Atualizando estado local...`);
     setNodes((nds) => {
@@ -110,14 +112,20 @@ export function useMindmap(projectId: string) {
       });
     });
 
-    // Save to database asynchronously in background
-    console.log(`[HOOK] Verificando se updatedNode foi criado:`, !!updatedNode);
+    // Debounce database save to avoid race conditions when typing fast
     if (updatedNode) {
-      console.log(`[HOOK] 💾 Salvando mudança de texto para node ${nodeId}:`, newText);
-      console.log(`[HOOK] Chamando updateMindmapNodes com projectId:`, projectId);
+      console.log(`[HOOK] 💾 Agendando salvamento de texto para node ${nodeId}:`, newText);
       
-      // Save in background without blocking UI
-      (async () => {
+      // Clear existing timeout for this node
+      const existingTimeout = textSaveTimeouts.current.get(nodeId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        console.log(`[HOOK] ⏰ Cancelando salvamento anterior para node ${nodeId}`);
+      }
+      
+      // Set new timeout for debounced save
+      const timeout = setTimeout(async () => {
+        console.log(`[HOOK] 💾 Executando salvamento debounced para node ${nodeId}:`, newText);
         try {
           console.log(`[HOOK] Verificando sessão...`);
           const { data: { session } } = await supabase.auth.getSession();
@@ -135,8 +143,12 @@ export function useMindmap(projectId: string) {
         } catch (err) {
           console.error('Error saving text change:', err);
           setError(err instanceof Error ? err : new Error("Failed to save text"));
+        } finally {
+          textSaveTimeouts.current.delete(nodeId);
         }
-      })();
+      }, 1000); // 1 second debounce
+      
+      textSaveTimeouts.current.set(nodeId, timeout);
     } else {
       console.error(`[HOOK] ❌ updatedNode é null, não salvando`);
     }
@@ -183,7 +195,19 @@ export function useMindmap(projectId: string) {
       }
     }
     loadMindmap();
-    return () => { isMounted = false; };
+    
+    // Cleanup function to clear all timeouts when component unmounts
+    return () => { 
+      isMounted = false;
+      
+      // Clear all pending text save timeouts
+      textSaveTimeouts.current.forEach((timeout) => clearTimeout(timeout));
+      textSaveTimeouts.current.clear();
+      
+      // Clear all pending position save timeouts
+      positionSaveTimeouts.current.forEach((timeout) => clearTimeout(timeout));
+      positionSaveTimeouts.current.clear();
+    };
   }, [projectId, handleTextChange]);
 
   // CRUD Operations using standard React state management
@@ -420,7 +444,9 @@ export function useMindmap(projectId: string) {
           }
         });
         
-        return updatedNodes;
+        // Force a re-creation of the nodes array to ensure ReactFlow recognizes position changes
+        // This is necessary to fix the selection bug where moved nodes are selected at old positions
+        return updatedNodes.map(node => ({ ...node }));
       });
     }
     
@@ -490,15 +516,35 @@ export function useMindmap(projectId: string) {
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
+      if (!session) {
+        console.error(`[HOOK] ❌ Não autenticado para editar edges`);
+        throw new Error("Not authenticated");
+      }
 
       // Handle deletion
       const deletionChange = changes.find(change => change.type === 'remove');
       if (deletionChange) {
-        console.log(`[HOOK] Processando remoção de edge: ${deletionChange.id}`);
-        await deleteMindmapEdge(deletionChange.id);
-        setEdges((currentEdges) => currentEdges.filter(edge => edge.id !== deletionChange.id));
-        return;
+        console.log(`[HOOK] 🗑️ Processando remoção de edge: ${deletionChange.id}`);
+        
+        try {
+          // Delete from database first
+          await deleteMindmapEdge(deletionChange.id);
+          console.log(`[HOOK] ✅ Edge ${deletionChange.id} deletada do banco com sucesso`);
+          
+          // Then update local state
+          setEdges((currentEdges) => {
+            const filteredEdges = currentEdges.filter(edge => edge.id !== deletionChange.id);
+            console.log(`[HOOK] ✅ Estado local atualizado: ${currentEdges.length} → ${filteredEdges.length} edges`);
+            return filteredEdges;
+          });
+          
+          console.log(`[HOOK] ✅ Deleção de edge ${deletionChange.id} concluída`);
+          return;
+        } catch (err) {
+          console.error(`[HOOK] ❌ Erro ao deletar edge ${deletionChange.id}:`, err);
+          setError(err instanceof Error ? err : new Error(`Failed to delete edge: ${err}`));
+          return;
+        }
       }
 
       // Apply other changes using ReactFlow's built-in logic

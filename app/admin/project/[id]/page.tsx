@@ -31,6 +31,18 @@ import { ImportNodesModal } from "@/components/admin/mindmap/ImportNodesModal";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { updateMindmapNodes } from "@/lib/mindmap";
+import { BulkOperationsToolbar } from "@/components/admin/mindmap/BulkOperationsToolbar";
+import { 
+  bulkToggleNodesPinned,
+  bulkToggleNodesArchived,
+  bulkDeleteNodes,
+  bulkUpdateNodesPriority,
+  bulkUpdateNodesWorkflow,
+  toggleNodePinned,
+  toggleNodeArchived
+} from "@/lib/mindmap";
+import { useToast } from "@/components/ui/use-toast";
+import { NotesSearch } from "@/components/admin/mindmap/NotesSearch";
 
 interface MindmapPageProps {
   params: {
@@ -250,6 +262,12 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false); // For mobile overlay
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  
+  // Selection state for notes view
+  const [selectedNotes, setSelectedNotes] = useState<Set<string>>(new Set());
+  const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredNodes, setFilteredNodes] = useState<any[]>([]);
 
   const {
     nodes,
@@ -336,6 +354,24 @@ export default function MindmapPage({ params }: MindmapPageProps) {
       isMounted = false;
     };
   }, [id]);
+
+  // Sync filtered nodes with nodes and apply search filter
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredNodes(nodes);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = nodes.filter(node => 
+        node.data.content.toLowerCase().includes(query)
+      );
+      setFilteredNodes(filtered);
+    }
+  }, [nodes, searchQuery]);
+
+  // Search handler
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+  };
 
   // Modify handleAddNode to NOT use layout
   const handleAddNode = useCallback(async () => {
@@ -510,6 +546,191 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     updateNode(nodeId, { dueDate });
   };
 
+  const clearSelection = () => {
+    setSelectedNotes(new Set());
+    setLastSelectedIndex(null);
+  };
+
+  // Selection handlers for notes view
+  const handleNoteSelection = useCallback((nodeId: string, index: number, event: React.MouseEvent) => {
+    if (event.shiftKey && lastSelectedIndex !== null) {
+      // Shift + click: select range from last selected to current
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const rangesToSelect = nodes.slice(start, end + 1);
+      
+      setSelectedNotes(prev => {
+        const newSet = new Set(prev);
+        rangesToSelect.forEach(node => {
+          newSet.add(node.id);
+        });
+        return newSet;
+      });
+    } else if (event.ctrlKey || event.metaKey) {
+      // Ctrl/Cmd + click: toggle selection
+      setSelectedNotes(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(nodeId)) {
+          newSet.delete(nodeId);
+        } else {
+          newSet.add(nodeId);
+        }
+        return newSet;
+      });
+      setLastSelectedIndex(index);
+    } else {
+      // Regular click: clear selection and select only this note
+      setSelectedNotes(new Set([nodeId]));
+      setLastSelectedIndex(index);
+    }
+  }, [nodes, lastSelectedIndex]);
+
+  // Bulk operations
+  const getSelectedNodeObjects = () => {
+    return nodes.filter(node => selectedNotes.has(node.id));
+  };
+
+  const handleBulkPin = async () => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    // Update local state immediately for better UX
+    nodeIds.forEach(nodeId => {
+      updateNode(nodeId, { isPinned: true });
+    });
+    
+    // Then update database
+    for (const nodeId of nodeIds) {
+      try {
+        await toggleNodePinned(nodeId);
+      } catch (error) {
+        console.error(`Error pinning node ${nodeId}:`, error);
+        // Revert on error
+        updateNode(nodeId, { isPinned: false });
+      }
+    }
+  };
+
+  const handleBulkUnpin = async () => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    // Update local state immediately for better UX
+    nodeIds.forEach(nodeId => {
+      updateNode(nodeId, { isPinned: false });
+    });
+    
+    // Then update database
+    for (const nodeId of nodeIds) {
+      try {
+        await toggleNodePinned(nodeId);
+      } catch (error) {
+        console.error(`Error unpinning node ${nodeId}:`, error);
+        // Revert on error
+        updateNode(nodeId, { isPinned: true });
+      }
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    // Update local state immediately for better UX
+    nodeIds.forEach(nodeId => {
+      updateNode(nodeId, { isArchived: true });
+    });
+    
+    // Then update database
+    for (const nodeId of nodeIds) {
+      try {
+        await toggleNodeArchived(nodeId);
+      } catch (error) {
+        console.error(`Error archiving node ${nodeId}:`, error);
+        // Revert on error
+        updateNode(nodeId, { isArchived: false });
+      }
+    }
+  };
+
+  const handleBulkUnarchive = async () => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    // Update local state immediately for better UX
+    nodeIds.forEach(nodeId => {
+      updateNode(nodeId, { isArchived: false });
+    });
+    
+    // Then update database
+    for (const nodeId of nodeIds) {
+      try {
+        await toggleNodeArchived(nodeId);
+      } catch (error) {
+        console.error(`Error unarchiving node ${nodeId}:`, error);
+        // Revert on error
+        updateNode(nodeId, { isArchived: true });
+      }
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    for (const nodeId of nodeIds) {
+      try {
+        await removeNode(nodeId);
+      } catch (error) {
+        console.error(`Error deleting node ${nodeId}:`, error);
+      }
+    }
+    clearSelection();
+  };
+
+  const handleBulkPriorityChange = async (priority: Priority) => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    // Update local state immediately for better UX
+    nodeIds.forEach(nodeId => {
+      updateNode(nodeId, { priority });
+    });
+    
+    // The updateNode function should handle database updates automatically
+    // If not, we could add explicit database calls here
+  };
+
+  const handleBulkWorkflowChange = async (workflowStatus: WorkflowStatus) => {
+    const selectedNodeObjects = getSelectedNodeObjects();
+    const nodeIds = selectedNodeObjects.map(node => node.id);
+    
+    // Update local state immediately for better UX
+    nodeIds.forEach(nodeId => {
+      updateNode(nodeId, { workflowStatus });
+    });
+    
+    // The updateNode function should handle database updates automatically
+    // If not, we could add explicit database calls here
+  };
+
+  // Function to reload/refresh all data
+  const handleSaveAndRefresh = async () => {
+    try {
+      // Force a re-render by clearing selection first
+      clearSelection();
+      
+      // Small delay to ensure state updates
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // The nodes will be automatically refreshed from the useMindmap hook
+      // since it's reactive to database changes
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+      throw error;
+    }
+  };
+
   const saveNewNote = async (priority?: Priority | null, workflowStatus?: WorkflowStatus | null, dueDate?: string | null, targetProjectIds?: string[]) => {
     if (newNoteText.trim() === "") {
       return;
@@ -614,7 +835,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
 
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-full bg-background text-foreground">
       {/* Mobile overlay for sidebar */}
       {isMobile && sidebarOpen && (
         <div 
@@ -688,9 +909,23 @@ export default function MindmapPage({ params }: MindmapPageProps) {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className="p-3 sm:p-6 border-b border-border space-y-3">
-          {/* Top row with controls */}
+        <div className="p-3 sm:p-6 border-b border-border">
           <div className="flex items-center justify-between">
+            {/* Left side - Title */}
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              {/* Mobile menu button */}
+              {isMobile && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="p-2 hover:bg-accent rounded-full flex-shrink-0"
+                >
+                  <Menu size={18} />
+                </button>
+              )}
+              <h1 className="text-base sm:text-xl font-bold truncate">Project {projectTitle ?? ""}</h1>
+            </div>
+            
+            {/* Right side - Controls */}
             <div className="flex items-center gap-2">
               <Select
                 value={viewType}
@@ -720,25 +955,11 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                   <Upload className="h-4 w-4" />
                 </Button>
               </Tooltip>
+              
+              <Link href="/admin/project">
+                <Button variant="outline" size="sm" className="text-xs sm:text-sm whitespace-nowrap">Back to Projects</Button>
+              </Link>
             </div>
-            
-            <Link href="/admin/project">
-              <Button variant="outline" size="sm" className="text-xs sm:text-sm whitespace-nowrap">Back to Projects</Button>
-            </Link>
-          </div>
-          
-          {/* Bottom row with title */}
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            {/* Mobile menu button */}
-            {isMobile && (
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="p-2 hover:bg-accent rounded-full flex-shrink-0"
-              >
-                <Menu size={18} />
-              </button>
-            )}
-            <h1 className="text-base sm:text-xl font-bold truncate">Project {projectTitle ?? ""}</h1>
           </div>
         </div>
 
@@ -761,20 +982,80 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             </div>
           ) : (
             <div className="h-full overflow-consistent">
-              <div className="p-3 sm:p-6">
-                {/* Quick Create Note - full width and centered */}
-                <div className="flex justify-center mb-6">
-                  <QuickCreateNote
-                    newNoteText={newNoteText}
-                    setNewNoteText={setNewNoteText}
-                    saveNewNote={saveNewNote}
-                    currentProjectId={id}
-                    projects={projects}
+              {/* Sticky components */}
+              <div className="sticky top-0 z-10 ">
+                <div className="p-3 sm:p-6 space-y-4">
+                  <BulkOperationsToolbar
+                    selectedCount={selectedNotes.size}
+                    onClearSelection={clearSelection}
+                    onBulkPin={handleBulkPin}
+                    onBulkUnpin={handleBulkUnpin}
+                    onBulkArchive={handleBulkArchive}
+                    onBulkUnarchive={handleBulkUnarchive}
+                    onBulkDelete={handleBulkDelete}
+                    onBulkPriorityChange={handleBulkPriorityChange}
+                    onBulkWorkflowChange={handleBulkWorkflowChange}
+                    onSave={handleSaveAndRefresh}
+                    variant="inline"
+                    className="shadow-md"
                   />
+                  
+                  {/* Search for current project */}
+                  <div className="flex justify-center">
+                    <div className="w-full max-w-md">
+                      <NotesSearch 
+                        onSearch={handleSearch}
+                        placeholder={`Buscar notas em ${projectTitle || 'projeto'}...`}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Quick Create Note - full width and centered */}
+                  <div className="flex justify-center">
+                    <div className="shadow-md">
+                      <QuickCreateNote
+                        newNoteText={newNoteText}
+                        setNewNoteText={setNewNoteText}
+                        saveNewNote={saveNewNote}
+                        currentProjectId={id}
+                        projects={projects}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Scrollable content area */}
+              <div className="p-3 sm:p-6">
+
+                {/* Search results and selection indicator */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-sm text-muted-foreground">
+                    {searchQuery ? (
+                      <>Encontradas {filteredNodes.length} nota(s) para &ldquo;{searchQuery}&rdquo;</>
+                    ) : (
+                      <>Mostrando {filteredNodes.length} nota(s)</>
+                    )}
+                  </div>
+                  {selectedNotes.size > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-primary">
+                        {selectedNotes.size} nota(s) selecionada(s)
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={clearSelection}
+                        className="text-xs"
+                      >
+                        Limpar seleção
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {nodes
+                  {filteredNodes
                     .sort((a, b) => {
                       // Sort by pinned first, then by archived (non-archived first), then by creation date
                       if (a.data.isPinned !== b.data.isPinned) {
@@ -785,30 +1066,56 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                       }
                       return 0;
                     })
-                                      .map((node) => (
-                    <EditableNoteCard
-                      key={node.id}
-                      id={node.id}
-                      content={node.data.content}
-                      projectId={id}
-                      isPinned={node.data.isPinned}
-                      isArchived={node.data.isArchived}
-                      priority={node.data.priority}
-                      workflowStatus={node.data.workflowStatus}
-                      dueDate={node.data.dueDate}
-                      onContentChange={handleNoteContentChange}
-                      onPinnedChange={handleNotePinnedChange}
-                      onArchivedChange={handleNoteArchivedChange}
-                      onPriorityChange={handleNotePriorityChange}
-                      onWorkflowStatusChange={handleNoteWorkflowStatusChange}
-                      onDueDateChange={handleNoteDueDateChange}
-                      onRemove={(nodeId) => {
-                        // Remove the node using the mindmap hook
-                        removeNode(nodeId);
-                      }}
-                      hideProjectSelector={true}
-                    />
-                  ))}
+                    .map((node, index) => {
+                      const isSelected = selectedNotes.has(node.id);
+                      return (
+                        <div
+                          key={node.id}
+                          className={`relative cursor-pointer transition-all duration-150 ${
+                            isSelected ? "ring-2 ring-white ring-offset-2 rounded-lg shadow-lg" : ""
+                          }`}
+                          onClick={(e) => {
+                            // Handle selection for all clicks
+                            const target = e.target as HTMLElement;
+                            const isInteractiveElement = target.closest('button, input, select, textarea, a, [role="button"], .markdown-editor, [contenteditable]');
+                            
+                            // Only handle selection if not clicking on interactive elements
+                            if (!isInteractiveElement) {
+                              handleNoteSelection(node.id, index, e);
+                            }
+                          }}
+                        >
+                          <EditableNoteCard
+                            id={node.id}
+                            content={node.data.content}
+                            projectId={id}
+                            isPinned={node.data.isPinned}
+                            isArchived={node.data.isArchived}
+                            priority={node.data.priority}
+                            workflowStatus={node.data.workflowStatus}
+                            dueDate={node.data.dueDate}
+                            onContentChange={handleNoteContentChange}
+                            onPinnedChange={handleNotePinnedChange}
+                            onArchivedChange={handleNoteArchivedChange}
+                            onPriorityChange={handleNotePriorityChange}
+                            onWorkflowStatusChange={handleNoteWorkflowStatusChange}
+                            onDueDateChange={handleNoteDueDateChange}
+                            onRemove={(nodeId) => {
+                              // Remove the node using the mindmap hook
+                              removeNode(nodeId);
+                              // Also remove from selection
+                              setSelectedNotes(prev => {
+                                const newSet = new Set(prev);
+                                newSet.delete(nodeId);
+                                return newSet;
+                              });
+                            }}
+                            onSelect={(event) => handleNoteSelection(node.id, index, event)}
+                            hideProjectSelector={true}
+                          />
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             </div>

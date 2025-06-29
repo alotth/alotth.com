@@ -17,13 +17,13 @@ export function Header() {
   };
 
   return (
-    <header className="bg-white dark:bg-gray-800 shadow-sm">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8 py-3 sm:py-4">
+    <header className="bg-background border-b border-border shadow-sm">
+      <div className="px-6 sm:px-4 lg:px-8 py-3 sm:py-4">
         <div className="flex justify-between items-center">
           {/* Logo */}
           <Link 
             href="/" 
-            className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-white"
+            className="text-lg sm:text-xl font-semibold text-foreground hover:text-primary transition-colors"
             onClick={closeMobileMenu}
           >
             Alotth.com
@@ -36,7 +36,7 @@ export function Header() {
                 <li>
                   <Link
                     href="/"
-                    className="text-sm lg:text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="text-sm lg:text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Home
                   </Link>
@@ -44,7 +44,7 @@ export function Header() {
                 <li>
                   <Link
                     href="/admin"
-                    className="text-sm lg:text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="text-sm lg:text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Admin
                   </Link>
@@ -52,7 +52,7 @@ export function Header() {
                 <li>
                   <Link
                     href="/admin/project"
-                    className="text-sm lg:text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="text-sm lg:text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Mindmap
                   </Link>
@@ -60,7 +60,7 @@ export function Header() {
                 <li>
                   <Link
                     href="/admin/proposals"
-                    className="text-sm lg:text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="text-sm lg:text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Proposals
                   </Link>
@@ -75,7 +75,7 @@ export function Header() {
             <ThemeToggle />
             <button
               onClick={toggleMobileMenu}
-              className="p-2 text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
               aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
             >
               {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
@@ -85,14 +85,14 @@ export function Header() {
 
         {/* Mobile Navigation Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="md:hidden mt-3 pt-3 border-t border-border">
             <nav>
               <ul className="space-y-3">
                 <li>
                   <Link
                     href="/"
                     onClick={closeMobileMenu}
-                    className="block py-2 text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="block py-2 text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Home
                   </Link>
@@ -101,7 +101,7 @@ export function Header() {
                   <Link
                     href="/admin"
                     onClick={closeMobileMenu}
-                    className="block py-2 text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="block py-2 text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Admin
                   </Link>
@@ -110,7 +110,7 @@ export function Header() {
                   <Link
                     href="/admin/project"
                     onClick={closeMobileMenu}
-                    className="block py-2 text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="block py-2 text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Mindmap
                   </Link>
@@ -119,7 +119,7 @@ export function Header() {
                   <Link
                     href="/admin/proposals"
                     onClick={closeMobileMenu}
-                    className="block py-2 text-base text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white transition-colors"
+                    className="block py-2 text-base text-muted-foreground hover:text-foreground transition-colors"
                   >
                     Proposals
                   </Link>
