@@ -15,7 +15,7 @@ import {
 import { EditableNoteCard } from "@/components/admin/mindmap/EditableNoteCard";
 import { v4 as uuidv4 } from "uuid";
 import { Dispatch, SetStateAction } from "react";
-import { Node, Edge, NodeChange } from "reactflow";
+import { Node, Edge, NodeChange, Position } from "reactflow";
 import Dagre from "@dagrejs/dagre";
 import { MindmapProject, Priority, WorkflowStatus } from "@/types/mindmap";
 import { getAvailableProjects } from "@/lib/mindmap";
@@ -184,58 +184,165 @@ const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
   );
 };
 
-// Add layout function
+// Enhanced layout function with neuron-like organization
 const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
   if (!nodes.length) return { nodes, edges };
 
-  // Create a new graph
-  const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  
-  // Set graph direction and spacing
-  g.setGraph({ 
-    rankdir: 'LR', // Left to Right layout for tree-like structure
-    align: 'DL', // Down-Left alignment
-    ranker: 'tight-tree', // Use tight-tree for more compact tree layout
-    ranksep: 150, // Horizontal spacing between ranks
-    nodesep: 80, // Vertical spacing between nodes
-    edgesep: 30, // Edge spacing
-    marginx: 20, // Margin in x direction
-    marginy: 20, // Margin in y direction
+  const NODE_WIDTH = 200;
+  const NODE_HEIGHT = 60;
+  const CLUSTER_SPACING = 350; // Much larger spacing between groups
+  const NODE_SPACING = 100; // Clean uniform spacing
+
+  // Find connected and isolated nodes
+  const connectedNodeIds = new Set<string>();
+  edges.forEach(edge => {
+    connectedNodeIds.add(edge.source);
+    connectedNodeIds.add(edge.target);
   });
 
-  // Add nodes with their dimensions
-  nodes.forEach((node) => {
-    g.setNode(node.id, { 
-      width: 200,
-      height: 60,
-      label: node.data.content 
+  const connectedNodes = nodes.filter(node => connectedNodeIds.has(node.id));
+  const isolatedNodes = nodes.filter(node => !connectedNodeIds.has(node.id));
+
+  let positionedNodes: Node[] = [];
+
+  // Layout connected nodes using Dagre
+  if (connectedNodes.length > 0) {
+    const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
+    
+    g.setGraph({ 
+      rankdir: 'LR',
+      align: 'DL',
+      ranker: 'tight-tree',
+      ranksep: 150,
+      nodesep: 80,
+      edgesep: 30,
+      marginx: 20,
+      marginy: 20,
     });
-  });
 
-  // Add edges
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
-  });
+    // Add only connected nodes to Dagre
+    connectedNodes.forEach((node) => {
+      g.setNode(node.id, { 
+        width: NODE_WIDTH,
+        height: NODE_HEIGHT,
+        label: node.data.content 
+      });
+    });
 
-  // Run the layout
-  Dagre.layout(g);
+    // Add edges
+    edges.forEach((edge) => {
+      g.setEdge(edge.source, edge.target);
+    });
 
-  // Get the positioned nodes with proper centering
-  const positionedNodes = nodes.map((node) => {
-    const nodeWithPosition = g.node(node.id);
-    return {
-      ...node,
-      // We are shifting the dagre node position (anchor=center center) to the top left
-      // so it matches the React Flow node anchor point (top left).
-      position: {
-        x: nodeWithPosition.x - nodeWithPosition.width / 2,
-        y: nodeWithPosition.y - nodeWithPosition.height / 2,
-      },
-      // Add source/target positions based on graph direction
-      targetPosition: 'left',
-      sourcePosition: 'right',
-    };
-  });
+    Dagre.layout(g);
+
+    // Position connected nodes
+    const connectedPositioned = connectedNodes.map((node) => {
+      const nodeWithPosition = g.node(node.id);
+             return {
+         ...node,
+         position: {
+           x: nodeWithPosition.x - nodeWithPosition.width / 2,
+           y: nodeWithPosition.y - nodeWithPosition.height / 2,
+         },
+         targetPosition: Position.Left,
+         sourcePosition: Position.Right,
+       };
+    });
+
+    positionedNodes = [...connectedPositioned];
+  }
+
+  // Group isolated nodes by content similarity and position them in clusters
+  if (isolatedNodes.length > 0) {
+    // Find bounds of connected nodes
+    let minX = 0, maxX = 0, minY = 0, maxY = 0;
+    if (connectedNodes.length > 0) {
+      const positions = positionedNodes.map(n => n.position);
+      minX = Math.min(...positions.map(p => p.x));
+      maxX = Math.max(...positions.map(p => p.x + NODE_WIDTH));
+      minY = Math.min(...positions.map(p => p.y));
+      maxY = Math.max(...positions.map(p => p.y + NODE_HEIGHT));
+    }
+
+    // Simple content-based clustering (by first word or short content)
+    const clusters = new Map<string, Node[]>();
+    
+    isolatedNodes.forEach(node => {
+      const content = node.data.content.toLowerCase().trim();
+      
+      // Create cluster key based on content characteristics
+      let clusterKey = 'misc';
+      
+      if (content.length < 20) {
+        // Short notes - group by first word
+        const firstWord = content.split(' ')[0];
+        if (firstWord.length > 2) {
+          clusterKey = `short_${firstWord}`;
+        }
+      } else if (content.includes('todo') || content.includes('tarefa')) {
+        clusterKey = 'tasks';
+      } else if (content.includes('idea') || content.includes('ideia')) {
+        clusterKey = 'ideas';
+      } else if (content.includes('note') || content.includes('nota')) {
+        clusterKey = 'notes';
+      } else {
+        // Group by content length
+        if (content.length < 50) clusterKey = 'short';
+        else if (content.length < 150) clusterKey = 'medium';
+        else clusterKey = 'long';
+      }
+
+      if (!clusters.has(clusterKey)) {
+        clusters.set(clusterKey, []);
+      }
+      clusters.get(clusterKey)!.push(node);
+    });
+
+    // Position clusters around the connected graph
+    const clusterArray = Array.from(clusters.entries());
+    const numClusters = clusterArray.length;
+    
+    // Calculate starting position for isolated clusters
+    let clusterStartX = maxX + CLUSTER_SPACING;
+    let clusterStartY = minY;
+    
+    if (connectedNodes.length === 0) {
+      // If no connected nodes, start from origin
+      clusterStartX = 100;
+      clusterStartY = 100;
+    }
+
+    clusterArray.forEach(([clusterKey, clusterNodes], clusterIndex) => {
+      // Calculate cluster position
+      const nodesPerRow = Math.ceil(Math.sqrt(clusterNodes.length));
+      const clusterWidth = nodesPerRow * (NODE_WIDTH + NODE_SPACING);
+      const clusterHeight = Math.ceil(clusterNodes.length / nodesPerRow) * (NODE_HEIGHT + NODE_SPACING);
+      
+      // Position this cluster
+      const clusterX = clusterStartX + (clusterIndex % 3) * (clusterWidth + CLUSTER_SPACING);
+      const clusterY = clusterStartY + Math.floor(clusterIndex / 3) * (clusterHeight + CLUSTER_SPACING);
+
+             // Clean grid positioning for organized look
+       const clusterPositioned = clusterNodes.map((node, index) => {
+         const row = Math.floor(index / nodesPerRow);
+         const col = index % nodesPerRow;
+         
+         // Perfect grid position with uniform spacing
+         const x = clusterX + col * (NODE_WIDTH + NODE_SPACING);
+         const y = clusterY + row * (NODE_HEIGHT + NODE_SPACING);
+         
+         return {
+           ...node,
+           position: { x, y },
+           targetPosition: Position.Left,
+           sourcePosition: Position.Right,
+         };
+       });
+
+      positionedNodes.push(...clusterPositioned);
+    });
+  }
 
   return { nodes: positionedNodes, edges };
 };
