@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import Link from "next/link";
 import { Pin, Archive, ExternalLink, Calendar, Clock, Edit2, Save, X, ArrowRight, Trash2, PinOff, ArchiveRestore, Expand, Minimize2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, extractUrlsFromContent } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { MarkdownEditor } from "@/components/ui/markdown-editor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,6 +89,9 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { toast } = useToast();
   const cardRef = useRef<HTMLDivElement>(null);
+
+  // Check if content has URLs
+  const hasUrls = extractUrlsFromContent(content).length > 0;
 
   const handleCancel = useCallback(() => {
     setContent(noteContent);
@@ -386,7 +389,7 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
       }}
     >
       {/* Status Indicators */}
-      <div className="absolute top-2 left-2 flex gap-1 z-10">
+      <div className="absolute top-2 left-2 flex gap-1 z-0">
         {notePinned && (
           <div className="bg-primary text-primary-foreground rounded-full p-1">
             <Pin size={10} />
@@ -397,10 +400,15 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
             <Archive size={10} />
           </div>
         )}
+        {hasUrls && (
+          <div className="bg-blue-500 text-white rounded-full p-1" title="Contém links">
+            <ExternalLink size={10} />
+          </div>
+        )}
       </div>
 
       {/* Action buttons */}
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-0">
         {!isEditing ? (
           <>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} title={isExpanded ? "Recolher" : "Expandir"}>
@@ -412,6 +420,23 @@ export function EditableNoteCard(props: EditableNoteCardProps) {
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleToggleArchived} title={noteArchived ? "Desarquivar" : "Arquivar"}>
               {noteArchived ? <ArchiveRestore size={12} /> : <Archive size={12} />}
             </Button>
+            {hasUrls && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-blue-500 hover:text-blue-600"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const urls = extractUrlsFromContent(content);
+                  if (urls.length > 0) {
+                    window.open(urls[0], '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                title="Abrir primeiro link em nova aba"
+              >
+                <ExternalLink size={12} />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"

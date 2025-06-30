@@ -2,10 +2,10 @@ import { memo, useState, useRef, useEffect } from "react";
 import { Handle, Position, NodeProps } from "reactflow";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { cn } from "@/lib/utils";
+import { cn, extractUrlsFromContent } from "@/lib/utils";
 import { getNodeProjects } from "@/lib/mindmap";
 import { usePathname } from "next/navigation";
-import { ChevronRight, ChevronLeft } from "lucide-react";
+import { ChevronRight, ChevronLeft, ExternalLink } from "lucide-react";
 
 interface MindmapNodeData {
   content: string;
@@ -37,6 +37,9 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pathname = usePathname();
   const currentProjectId = pathname?.split("/admin/project/")[1]?.split("/")[0] || "";
+
+  // Check if content has URLs
+  const hasUrls = extractUrlsFromContent(text).length > 0;
 
   useEffect(() => {
     if (contentRef.current) {
@@ -139,22 +142,50 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         isConnectable={isConnectable}
         className="w-2 h-2 !bg-border"
       />
-      
-      {/* Improved expand/collapse button with better positioning */}
-      {!isEditing && shouldShowExpand && (
-        <button
-          onClick={toggleExpand}
-          className="absolute top-2 right-2 p-1.5 bg-white/80 hover:bg-white border border-border hover:border-border rounded-full z-10 transition-all duration-150 opacity-0 group-hover:opacity-100"
-          title={isExpanded ? "Recolher" : "Expandir"}
-          aria-label={isExpanded ? "Recolher nota" : "Expandir nota"}
-        >
-          {isExpanded ? (
-            <ChevronLeft size={14} />
-          ) : (
-            <ChevronRight size={14} />
-          )}
-        </button>
+
+      {/* Status indicator for links */}
+      {hasUrls && !isEditing && (
+        <div className="absolute top-2 left-2 bg-blue-500 text-white rounded-full p-1 z-0" title="Contém links">
+          <ExternalLink size={10} />
+        </div>
       )}
+      
+      {/* Action buttons */}
+      <div className="absolute top-2 right-2 flex gap-1 z-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Link button */}
+        {!isEditing && hasUrls && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              const urls = extractUrlsFromContent(text);
+              if (urls.length > 0) {
+                window.open(urls[0], '_blank', 'noopener,noreferrer');
+              }
+            }}
+            className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white border border-blue-600 rounded-full transition-all duration-150"
+            title="Abrir primeiro link em nova aba"
+            aria-label="Abrir primeiro link em nova aba"
+          >
+            <ExternalLink size={14} />
+          </button>
+        )}
+        
+        {/* Expand/collapse button */}
+        {!isEditing && shouldShowExpand && (
+          <button
+            onClick={toggleExpand}
+            className="p-1.5 bg-white/80 hover:bg-white border border-border hover:border-border rounded-full transition-all duration-150"
+            title={isExpanded ? "Recolher" : "Expandir"}
+            aria-label={isExpanded ? "Recolher nota" : "Expandir nota"}
+          >
+            {isExpanded ? (
+              <ChevronLeft size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
+          </button>
+        )}
+      </div>
 
       {isEditing ? (
         <div className="relative">

@@ -8,6 +8,7 @@ import {
   NoteWithProject,
 } from "@/types/mindmap";
 import { Node, Edge } from "reactflow";
+import { convertUrlsToMarkdown } from "./utils";
 
 export async function createMindmapProject(
   title: string,
@@ -141,12 +142,15 @@ export async function updateMindmapNodes({
 
   // For each node, first create the node
   for (const node of nodes) {
+    // Convert standalone URLs to markdown format before saving
+    const processedContent = convertUrlsToMarkdown(node.data.content || '');
+    
     // First, try to insert the node
     const { error: nodeError } = await supabase
       .from("mindmap_nodes")
       .upsert({
         id: node.id,
-        content: node.data.content || '',
+        content: processedContent,
         is_pinned: node.data.isPinned || node.data.is_pinned || false,
         is_archived: node.data.isArchived || node.data.is_archived || false,
         priority: node.data.priority || null,
@@ -1415,10 +1419,13 @@ export async function updateNoteContent(nodeId: string, content: string): Promis
     throw new Error("Not authenticated");
   }
 
+  // Convert standalone URLs to markdown format before saving
+  const processedContent = convertUrlsToMarkdown(content);
+
   const { error } = await supabase
     .from("mindmap_nodes")
     .update({ 
-      content,
+      content: processedContent,
       updated_at: new Date().toISOString()
     })
     .eq("id", nodeId);
