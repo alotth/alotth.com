@@ -314,6 +314,9 @@ export function EditorMindmap({
         sourceHandle: null,
         targetHandle: null,
       });
+
+      // Trigger edit mode after a delay
+      setPendingEditNodeId(newNodeId);
     };
 
     document.addEventListener('newNodeFromHandle', handleNewNodeFromHandle as EventListener);

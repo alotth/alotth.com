@@ -164,11 +164,12 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
         const currentNode = getNode(id);
         if (!currentNode) return;
 
-        // Calculate new node position based on handle type
-        const offset = handleType === 'source' ? 200 : -200;
+        // Calculate new node position with increased distance and random vertical offset
+        const horizontalOffset = handleType === 'source' ? 400 : -400;
+        const verticalOffset = Math.random() * 100 - 50; // Random value between -50 and 50
         const newPosition = {
-          x: currentNode.position.x + offset,
-          y: currentNode.position.y,
+          x: currentNode.position.x + horizontalOffset,
+          y: currentNode.position.y + verticalOffset,
         };
 
         // Emit a custom event to update node position and create connection
