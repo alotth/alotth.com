@@ -25,6 +25,7 @@ import {
   bulkUpdateNodesWorkflow 
 } from "@/lib/mindmap";
 import { useToast } from "@/components/ui/use-toast";
+import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { v4 as uuidv4 } from "uuid";
 
 // Define nodeTypes and edgeTypes outside component to prevent ReactFlow warnings
@@ -47,6 +48,7 @@ interface EditorProps {
   // Mindmap state and callbacks coming from parent
   nodes: Node[];
   edges: Edge[];
+  loading?: boolean;
   updateNode: (
     nodeId: string,
     updates: {
@@ -63,6 +65,8 @@ interface EditorProps {
     edges: { source: string; target: string }[];
   }) => void;
   onAutoOrganize: () => void;
+  // Undo/Redo callbacks
+  onStateRestore?: (nodes: Node[], edges: Edge[]) => void;
 }
 
 export function EditorMindmap({
@@ -71,18 +75,35 @@ export function EditorMindmap({
   handleAddProjectNode,
   nodes,
   edges,
+  loading,
   updateNode,
   onNodesChange,
   onEdgesChange,
   onConnect,
   onImportNodes,
   onAutoOrganize,
+  onStateRestore,
 }: EditorProps) {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
   const { toast } = useToast();
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
+
+  // Initialize undo/redo system early
+  const {
+    saveState,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    clearHistory,
+    getHistoryInfo,
+  } = useUndoRedo({
+    maxHistorySize: 50,
+    storageKey: `mindmap-history-${projectId}`,
+    onStateRestore,
+  });
 
   // Simplified ReactFlow refresh logic
   const [reactFlowKey, setReactFlowKey] = useState(0);
@@ -164,6 +185,11 @@ export function EditorMindmap({
         });
         
         if (newNodeId) {
+          // Save state AFTER creating the node
+          setTimeout(() => {
+            saveState(nodes, edges, "criar node via duplo clique");
+          }, 50);
+          
           // Set up edit mode
           setPendingEditNodeId(newNodeId);
         }
@@ -178,7 +204,7 @@ export function EditorMindmap({
     }
     
     lastPaneClickTime.current = currentTime;
-  }, [handleAddNode, toast]);
+  }, [handleAddNode, toast, saveState, nodes, edges]);
 
   // Handle selection changes for bulk operations
   const onSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
@@ -195,8 +221,23 @@ export function EditorMindmap({
       setSelectedEdges([]);
     }
     
+    // Save state before applying significant changes for undo functionality
+    const hasSignificantChanges = changes.some(change => 
+      change.type === 'remove'
+    );
+    
+    if (hasSignificantChanges) {
+      const changeDescription = changes
+        .filter(change => change.type === 'remove')
+        .map(change => `deletar node ${change.id}`)
+        .join(', ');
+      
+      console.log('[UNDO] Saving state before node deletion:', changeDescription);
+      saveState(nodes, edges, changeDescription);
+    }
+    
     onNodesChange(changes);
-  }, [onNodesChange, selectedNodes.length]);
+  }, [onNodesChange, selectedNodes.length, saveState, nodes, edges]);
 
   // Handle style changes
   const handleStyleChange = useCallback((newStyle: any) => {
@@ -325,15 +366,17 @@ export function EditorMindmap({
     const handleNewNodeFromHandle = (event: CustomEvent) => {
       const { newNodeId, position, connection } = event.detail;
       
-      // Update node position
-      updateNode(newNodeId, { position });
-      
-      // Create connection
+      // Create connection first
       onConnect({
         ...connection,
         sourceHandle: null,
         targetHandle: null,
       });
+
+      // Save state AFTER creating connection
+      setTimeout(() => {
+        saveState(nodes, edges, `criar node via handle e conectar`);
+      }, 100);
 
       // Trigger edit mode after a delay
       setPendingEditNodeId(newNodeId);
@@ -343,7 +386,33 @@ export function EditorMindmap({
     return () => {
       document.removeEventListener('newNodeFromHandle', handleNewNodeFromHandle as EventListener);
     };
-  }, [updateNode, onConnect]);
+  }, [updateNode, onConnect, saveState, nodes, edges]);
+
+  // Listen for text save events to track for undo
+  useEffect(() => {
+    const handleTextSaved = (event: CustomEvent) => {
+      const { nodeId, newText } = event.detail;
+      console.log(`[UNDO] Text saved for node ${nodeId}: "${newText}"`);
+      
+      // Save state after text change (with debounce to avoid too many saves)
+      setTimeout(() => {
+        saveState(nodes, edges, `editar texto do node ${nodeId.slice(0, 8)}`);
+      }, 600); // Reduced debounce
+    };
+
+    document.addEventListener('nodeTextSaved', handleTextSaved as EventListener);
+    return () => {
+      document.removeEventListener('nodeTextSaved', handleTextSaved as EventListener);
+    };
+  }, [saveState, nodes, edges]);
+
+  // Save initial state when nodes are loaded
+  useEffect(() => {
+    if (nodes.length > 0 && !loading) {
+      // Save initial state for undo/redo
+      saveState(nodes, edges, "estado inicial");
+    }
+  }, [loading]); // Only trigger when loading changes to false
 
   return (
     <div className="h-full relative">
@@ -358,6 +427,12 @@ export function EditorMindmap({
           selectedEdge={null}
           currentProjectId={projectId}
           onAutoOrganize={onAutoOrganize}
+          
+          // Undo/Redo props
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
           
           // Bulk operations props
           selectedCount={selectedNodes.length}

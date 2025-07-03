@@ -387,6 +387,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     onConnect,
     getMindmapTitle,
     onNodesChange,
+    restoreState,
   } = useMindmap(id);
 
   // Local state for project title
@@ -478,6 +479,14 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   const handleSearch = (query: string) => {
     setSearchQuery(query);
   };
+
+  // Handle undo/redo state restoration
+  const handleStateRestore = useCallback((restoredNodes: Node[], restoredEdges: Edge[]) => {
+    console.log('[UNDO] Restoring state with', restoredNodes.length, 'nodes and', restoredEdges.length, 'edges');
+    
+    // Use the restoreState function from the mindmap hook
+    restoreState(restoredNodes, restoredEdges);
+  }, [restoreState]);
 
   // Enhanced handleAddNode that can accept optional node data
   const handleAddNode = useCallback(async (nodeData?: Partial<Node>) => {
@@ -1080,12 +1089,14 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                 handleAddProjectNode={handleAddProjectNode}
                 nodes={nodesWithTimestamp}
                 edges={edges}
+                loading={loading}
                 updateNode={updateNode}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
                 onImportNodes={handleImportNodes}
                 onAutoOrganize={handleAutoOrganize}
+                onStateRestore={handleStateRestore}
               />
             </div>
           ) : (

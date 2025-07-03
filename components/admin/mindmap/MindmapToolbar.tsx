@@ -16,7 +16,9 @@ import {
   X, 
   Save,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Undo,
+  Redo
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -43,6 +45,12 @@ interface MindmapToolbarProps {
   currentProjectId: string;
   onAutoOrganize: () => void;
   
+  // Undo/Redo props
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  
   // Bulk operations props
   selectedCount: number;
   onClearSelection: () => void;
@@ -66,6 +74,12 @@ export function MindmapToolbar({
   selectedEdge,
   currentProjectId,
   onAutoOrganize,
+  
+  // Undo/Redo props
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
   
   // Bulk operations props
   selectedCount,
@@ -185,6 +199,30 @@ export function MindmapToolbar({
             </Button>
           </Tooltip>
 
+          <Tooltip content="Desfazer (Ctrl+Z)" side="bottom">
+            <Button
+              onClick={onUndo}
+              disabled={!canUndo}
+              size="sm"
+              variant="secondary"
+              className="h-8 w-8 p-0"
+            >
+              <Undo className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip content="Refazer (Ctrl+Y)" side="bottom">
+            <Button
+              onClick={onRedo}
+              disabled={!canRedo}
+              size="sm"
+              variant="secondary"
+              className="h-8 w-8 p-0"
+            >
+              <Redo className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+
           <Tooltip content="Conectar projeto (Ctrl+L)" side="bottom">
             <Button
               onClick={() => setIsProjectSelectorOpen(true)}
@@ -226,6 +264,8 @@ export function MindmapToolbar({
              <div className="text-xs space-y-0.5 text-white/80">
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Del</kbd> Deletar seleção</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Ctrl+N</kbd> Nova nota</div>
+               <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Ctrl+Z</kbd> Desfazer</div>
+               <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Ctrl+Y</kbd> Refazer</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click</kbd> Editar nota</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click vazio</kbd> Criar nota</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click edge</kbd> Inserir nota</div>

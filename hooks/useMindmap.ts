@@ -150,6 +150,11 @@ export function useMindmap(projectId: string) {
           }
 
           console.log(`[HOOK] ✅ Texto salvo no banco com sucesso para node ${nodeId}`);
+          
+          // Emit event for undo/redo tracking
+          document.dispatchEvent(new CustomEvent('nodeTextSaved', {
+            detail: { nodeId, newText }
+          }));
         } catch (err) {
           console.error('Error saving text change:', err);
           setError(err instanceof Error ? err : new Error("Failed to save text"));
@@ -634,6 +639,67 @@ export function useMindmap(projectId: string) {
     }
   }, [projectId, supabase]);
 
+  // Restore state from undo/redo
+  const restoreState = useCallback(async (restoredNodes: Node[], restoredEdges: Edge[]) => {
+    console.log(`[HOOK] Restoring state with ${restoredNodes.length} nodes and ${restoredEdges.length} edges`);
+    
+    try {
+      // Temporarily disable protection to allow restore
+      addingNodeProtection.current = true;
+      
+      // Clear all pending timeouts to avoid conflicts
+      positionSaveTimeouts.current.forEach((timeout) => clearTimeout(timeout));
+      positionSaveTimeouts.current.clear();
+      textSaveTimeouts.current.forEach((timeout) => clearTimeout(timeout));
+      textSaveTimeouts.current.clear();
+      
+      // Update local state immediately
+      setNodes(restoredNodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          // Ensure onChange is properly set for each restored node
+          onChange: (newText: string) => {
+            console.log(`[RESTORED-NODE] onChange called for node ${node.id} with text:`, newText);
+            handleTextChange(node.id, newText);
+          },
+        },
+      })));
+      
+      setEdges(restoredEdges);
+      
+      console.log(`[HOOK] ✅ State restored locally`);
+      
+      // Save restored state to database (without triggering undo events)
+      try {
+        await updateMindmapNodes({
+          projectId,
+          nodes: restoredNodes,
+        });
+        
+        if (restoredEdges.length > 0) {
+          await updateMindmapEdges(projectId, restoredEdges);
+        }
+        
+        console.log(`[HOOK] ✅ State saved to database`);
+      } catch (dbError) {
+        console.warn(`[HOOK] ⚠️ Database save failed during restore:`, dbError);
+        // Continue anyway since local state is updated
+      }
+      
+      // Remove protection after a delay
+      setTimeout(() => {
+        addingNodeProtection.current = false;
+        console.log(`[HOOK] 🔓 Protection removed after restore`);
+      }, 1000);
+      
+    } catch (err) {
+      console.error(`[HOOK] ❌ Error restoring state:`, err);
+      setError(err instanceof Error ? err : new Error("Failed to restore state"));
+      addingNodeProtection.current = false;
+    }
+  }, [projectId, handleTextChange]);
+
   return {
     // State
     nodes,
@@ -653,5 +719,8 @@ export function useMindmap(projectId: string) {
     
     // Utilities
     getMindmapTitle,
+    
+    // Undo/Redo
+    restoreState,
   };
 }
