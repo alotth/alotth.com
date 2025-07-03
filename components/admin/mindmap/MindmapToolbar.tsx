@@ -226,7 +226,9 @@ export function MindmapToolbar({
              <div className="text-xs space-y-0.5 text-white/80">
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Del</kbd> Deletar seleção</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Ctrl+N</kbd> Nova nota</div>
-               <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click</kbd> Editar</div>
+               <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click</kbd> Editar nota</div>
+               <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click vazio</kbd> Criar nota</div>
+               <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Duplo-click edge</kbd> Inserir nota</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Ctrl+L</kbd> Conectar projeto</div>
                <div>• <kbd className="px-1 py-0.5 bg-black/40 rounded text-xs text-white/80">Ctrl+click</kbd> Seleção múltipla</div>
             </div>

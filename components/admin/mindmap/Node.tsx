@@ -6,6 +6,7 @@ import { cn, extractUrlsFromContent } from "@/lib/utils";
 import { getNodeProjects } from "@/lib/mindmap";
 import { usePathname } from "next/navigation";
 import { ChevronRight, ChevronLeft, ExternalLink } from "lucide-react";
+import { useReactFlow } from 'reactflow';
 
 interface MindmapNodeData {
   content: string;
@@ -17,6 +18,7 @@ interface MindmapNodeData {
   };
   onChange?: (newText: string) => void;
   lastProjectNodeAdded?: number; // Timestamp of last project node addition
+  onAddNode?: () => Promise<string | undefined>;
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -32,11 +34,25 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   const [isExpanded, setIsExpanded] = useState(false);
   const [shouldShowExpand, setShouldShowExpand] = useState(false);
   const [projects, setProjects] = useState<{ project_id: string; project_title: string }[]>([]);
+  const { getNode } = useReactFlow();
 
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pathname = usePathname();
   const currentProjectId = pathname?.split("/admin/project/")[1]?.split("/")[0] || "";
+
+  // Debug: Log onChange status on render
+  useEffect(() => {
+    console.log(`[NODE-${id}] Rendered with data.onChange:`, !!data.onChange, `content: "${data.content}"`);
+  }, [data.onChange, data.content, id]);
+
+  // Sync local text with data.content when it changes from external updates
+  useEffect(() => {
+    if (data.content !== text && !isEditing) {
+      console.log(`[NODE-${id}] Syncing text from "${text}" to "${data.content}"`);
+      setText(data.content);
+    }
+  }, [data.content, text, isEditing, id]);
 
   // Check if content has URLs
   const hasUrls = extractUrlsFromContent(text).length > 0;
@@ -106,13 +122,26 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
   };
 
   const handleBlur = () => {
+    console.log(`[NODE-${id}] handleBlur called - isEditing: ${isEditing}, text: "${text}"`);
+    console.log(`[NODE-${id}] data.onChange exists:`, !!data.onChange);
+    
     setIsEditing(false);
     // Emit edit stop event
     document.dispatchEvent(new CustomEvent('nodeEditStop'));
     
     if (data.onChange) {
+      console.log(`[NODE-${id}] 🔄 Calling data.onChange with text: "${text}"`);
       data.onChange(text);
+    } else {
+      console.error(`[NODE-${id}] ❌ data.onChange is not defined!`);
     }
+  };
+
+  // Add handler for text area change to see if it's being updated
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    console.log(`[NODE-${id}] Text changed from "${text}" to "${newText}"`);
+    setText(newText);
   };
 
   const toggleExpand = (e: React.MouseEvent) => {
@@ -120,28 +149,68 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     setIsExpanded(!isExpanded);
   };
 
+  const handleHandleDoubleClick = async (event: React.MouseEvent, handleType: 'source' | 'target') => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!data.onAddNode) {
+      console.error('onAddNode callback not provided');
+      return;
+    }
+
+    try {
+      const newNodeId = await data.onAddNode();
+      if (newNodeId) {
+        const currentNode = getNode(id);
+        if (!currentNode) return;
+
+        // Calculate new node position based on handle type
+        const offset = handleType === 'source' ? 200 : -200;
+        const newPosition = {
+          x: currentNode.position.x + offset,
+          y: currentNode.position.y,
+        };
+
+        // Emit a custom event to update node position and create connection
+        document.dispatchEvent(new CustomEvent('newNodeFromHandle', {
+          detail: {
+            newNodeId,
+            position: newPosition,
+            connection: handleType === 'source' 
+              ? { source: id, target: newNodeId }
+              : { source: newNodeId, target: id }
+          }
+        }));
+      }
+    } catch (error) {
+      console.error("Error creating node from handle:", error);
+    }
+  };
+
   return (
+    <>
+    <Handle
+        type="target"
+        position={Position.Left}
+        isConnectable={isConnectable}
+        className="!w-2 !h-2 !z-10 !bg-gray-400 hover:!bg-gray-600 transition-colors"
+        onDoubleClick={(e) => handleHandleDoubleClick(e, 'target')}
+      />
     <div
       className={cn(
-        "px-4 py-2 shadow-md rounded-md bg-white border-2 border-border transition-all duration-200 nopan relative group",
+        "px-4 py-2 shadow-md rounded-md bg-white  transition-all duration-200 nopan relative group",
         isExpanded ? "w-[600px]" : "w-[200px]",
         !isExpanded && !isEditing && "max-h-[160px] overflow-hidden"
       )}
       style={{
         backgroundColor: data.style?.backgroundColor || "#ffffff",
-        borderColor: data.style?.borderColor || "#000000",
-        borderWidth: data.style?.borderWidth || 2,
+        border: "1px solid #000000",
         fontSize: data.style?.fontSize || 14,
       }}
       onDoubleClick={handleDoubleClick}
       onMouseDown={handleMouseDown}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        isConnectable={isConnectable}
-        className="w-2 h-2 !bg-border"
-      />
+      
 
       {/* Status indicator for links */}
       {hasUrls && !isEditing && (
@@ -192,7 +261,7 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
           <textarea
             ref={textareaRef}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={handleTextChange}
             onBlur={handleBlur}
             className={cn(
               "w-full font-medium bg-transparent border-none focus:outline-none resize-none prose prose-sm max-w-none text-gray-900",
@@ -275,13 +344,16 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
           </div>
         </div>
       )}
-      <Handle
+      
+    </div>
+    <Handle
         type="source"
         position={Position.Right}
         isConnectable={isConnectable}
-        className="w-2 h-2 !bg-border"
+        className="!w-2 !h-2 !z-10 !bg-gray-400 hover:!bg-gray-600 transition-colors"
+        onDoubleClick={(e) => handleHandleDoubleClick(e, 'source')}
       />
-    </div>
+      </>
   );
 });
 

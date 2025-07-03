@@ -479,34 +479,36 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     setSearchQuery(query);
   };
 
-  // Modify handleAddNode to NOT use layout
-  const handleAddNode = useCallback(async () => {
+  // Enhanced handleAddNode that can accept optional node data
+  const handleAddNode = useCallback(async (nodeData?: Partial<Node>) => {
     const timestamp = Date.now();
-    console.log(`[PAGE-${timestamp}] handleAddNode chamado`);
+    console.log(`[PAGE-${timestamp}] handleAddNode chamado`, nodeData);
     try {
-      const newNodeId = uuidv4();
+      const newNodeId = nodeData?.id || uuidv4();
       const newNode = {
         id: newNodeId,
-        position: { x: 0, y: 0 },
+        position: nodeData?.position || { x: 0, y: 0 },
         data: {
-          content: "New Node",
-          style: {
+          content: nodeData?.data?.content ?? "",
+          style: nodeData?.data?.style || {
             backgroundColor: "#ffffff",
             borderColor: "#000000",
             borderWidth: 2,
             fontSize: 14,
           },
-          priority: null,
-          workflowStatus: null,
-          dueDate: null,
+          priority: nodeData?.data?.priority || null,
+          workflowStatus: nodeData?.data?.workflowStatus || null,
+          dueDate: nodeData?.data?.dueDate || null,
         },
+        ...nodeData,
       };
-
       // Add node to database
       await addNode(newNode);
       console.log(`[PAGE-${timestamp}] ✅ addNode concluído`);
+      return newNodeId;
     } catch (error) {
       console.error(`[PAGE-${timestamp}] ❌ Erro em handleAddNode:`, error);
+      return undefined;
     }
   }, [addNode]);
 

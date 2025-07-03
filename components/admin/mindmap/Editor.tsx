@@ -8,6 +8,8 @@ import ReactFlow, {
   NodeChange,
   EdgeChange,
   OnSelectionChangeFunc,
+  ReactFlowInstance,
+  useReactFlow,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -23,6 +25,7 @@ import {
   bulkUpdateNodesWorkflow 
 } from "@/lib/mindmap";
 import { useToast } from "@/components/ui/use-toast";
+import { v4 as uuidv4 } from "uuid";
 
 // Define nodeTypes and edgeTypes outside component to prevent ReactFlow warnings
 const nodeTypes = {
@@ -35,7 +38,7 @@ const edgeTypes = {
 
 interface EditorProps {
   projectId: string;
-  handleAddNode: () => void;
+  handleAddNode: () => Promise<string | undefined>;
   handleAddProjectNode: (
     linkedProjectId: string,
     projectName: string,
@@ -79,6 +82,7 @@ export function EditorMindmap({
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
   const [selectedEdges, setSelectedEdges] = useState<Edge[]>([]);
   const { toast } = useToast();
+  const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
 
   // Simplified ReactFlow refresh logic
   const [reactFlowKey, setReactFlowKey] = useState(0);
@@ -117,30 +121,42 @@ export function EditorMindmap({
     }, 0);
   }, []);
 
-  // Listen for edit start/stop events from nodes
-  useEffect(() => {
-    const handleEditStart = () => {
-      setIsEditingAny(true);
-    };
-    
-    const handleEditStop = () => {
-      setIsEditingAny(false);
-    };
+  // Track double clicks on pane
+  const lastPaneClickTime = useRef<number>(0);
+  const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
-    // Listen for custom events from nodes
-    document.addEventListener('nodeEditStart', handleEditStart);
-    document.addEventListener('nodeEditStop', handleEditStop);
-
-    return () => {
-      document.removeEventListener('nodeEditStart', handleEditStart);
-      document.removeEventListener('nodeEditStop', handleEditStop);
-    };
-  }, []);
-
-  // Handle pane click (deselect)
-  const onPaneClick = useCallback(() => {
+  // Handle pane click (deselect and detect double clicks)
+  const onPaneClick = useCallback(async (event: React.MouseEvent) => {
     setSelectedNode(null);
-  }, []);
+    const currentTime = Date.now();
+    const timeDiff = currentTime - lastPaneClickTime.current;
+    if (timeDiff < DOUBLE_CLICK_THRESHOLD) {
+      // Double click detected - create new node
+      event.preventDefault();
+      if (!reactFlowInstance.current) return;
+      const position = reactFlowInstance.current.project({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      try {
+        const newNodeId = await handleAddNode();
+        if (newNodeId) {
+          setTimeout(() => {
+            updateNode(newNodeId, { position });
+            setPendingEditNodeId(newNodeId); // Sinaliza para ativar edição depois
+          }, 50);
+        }
+      } catch (error) {
+        console.error("Error creating node:", error);
+        toast({
+          title: "Error",
+          description: "Failed to create node",
+          variant: "destructive",
+        });
+      }
+    }
+    lastPaneClickTime.current = currentTime;
+  }, [handleAddNode, updateNode, toast]);
 
   // Handle selection changes for bulk operations
   const onSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
@@ -266,6 +282,46 @@ export function EditorMindmap({
     })));
   };
 
+  const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
+
+  // Efeito para ativar edição após proteção e renderização do node
+  useEffect(() => {
+    if (!pendingEditNodeId) return;
+    // Aguarda proteção ser removida e node estar no DOM
+    const timer = setTimeout(() => {
+      const nodeElement = document.querySelector(`[data-id="${pendingEditNodeId}"]`);
+      if (nodeElement) {
+        const editEvent = new CustomEvent('triggerEdit', { detail: { nodeId: pendingEditNodeId } });
+        nodeElement.dispatchEvent(editEvent);
+        setIsEditingAny(true);
+        setPendingEditNodeId(null); // Limpa o estado
+      }
+    }, 1150); // 1.15s para garantir proteção removida e DOM atualizado
+    return () => clearTimeout(timer);
+  }, [pendingEditNodeId, nodes]);
+
+  // Listen for new node creation from handle double click
+  useEffect(() => {
+    const handleNewNodeFromHandle = (event: CustomEvent) => {
+      const { newNodeId, position, connection } = event.detail;
+      
+      // Update node position
+      updateNode(newNodeId, { position });
+      
+      // Create connection
+      onConnect({
+        ...connection,
+        sourceHandle: null,
+        targetHandle: null,
+      });
+    };
+
+    document.addEventListener('newNodeFromHandle', handleNewNodeFromHandle as EventListener);
+    return () => {
+      document.removeEventListener('newNodeFromHandle', handleNewNodeFromHandle as EventListener);
+    };
+  }, [updateNode, onConnect]);
+
   return (
     <div className="h-full relative">
       <div className="absolute top-4 right-4 z-10">
@@ -294,7 +350,13 @@ export function EditorMindmap({
       </div>
       <ReactFlow
         key={reactFlowKey}
-        nodes={nodes}
+        nodes={nodes.map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            onAddNode: handleAddNode,
+          }
+        }))}
         edges={edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
@@ -303,6 +365,9 @@ export function EditorMindmap({
         onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={onPaneClick}
         onSelectionChange={onSelectionChange}
+        onInit={(instance) => {
+          reactFlowInstance.current = instance;
+        }}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         nodeDragThreshold={5}

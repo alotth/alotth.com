@@ -112,7 +112,7 @@ export function useMindmap(projectId: string) {
       });
     });
 
-    // Debounce database save to avoid race conditions when typing fast
+    // Simplified database save with shorter debounce
     if (updatedNode) {
       console.log(`[HOOK] 💾 Agendando salvamento de texto para node ${nodeId}:`, newText);
       
@@ -123,7 +123,7 @@ export function useMindmap(projectId: string) {
         console.log(`[HOOK] ⏰ Cancelando salvamento anterior para node ${nodeId}`);
       }
       
-      // Set new timeout for debounced save
+      // Set new timeout for debounced save with shorter delay
       const timeout = setTimeout(async () => {
         console.log(`[HOOK] 💾 Executando salvamento debounced para node ${nodeId}:`, newText);
         try {
@@ -135,10 +135,20 @@ export function useMindmap(projectId: string) {
           }
           console.log(`[HOOK] ✅ Sessão válida encontrada`);
 
-          await updateMindmapNodes({
-            projectId,
-            nodes: [updatedNode!],
-          });
+          // Use more direct update to reduce race conditions
+          const { error } = await supabase
+            .from("mindmap_nodes")
+            .update({ 
+              content: newText,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", nodeId);
+
+          if (error) {
+            console.error(`[HOOK] ❌ Erro ao salvar no banco:`, error);
+            throw error;
+          }
+
           console.log(`[HOOK] ✅ Texto salvo no banco com sucesso para node ${nodeId}`);
         } catch (err) {
           console.error('Error saving text change:', err);
@@ -146,7 +156,7 @@ export function useMindmap(projectId: string) {
         } finally {
           textSaveTimeouts.current.delete(nodeId);
         }
-      }, 1000); // 1 second debounce
+      }, 500); // Reduced from 1000ms to 500ms for faster saving
       
       textSaveTimeouts.current.set(nodeId, timeout);
     } else {
@@ -229,32 +239,40 @@ export function useMindmap(projectId: string) {
       if (!session) throw new Error("Not authenticated");
 
       const nodeId = nodeData.id || crypto.randomUUID();
+      
+      // Ensure onChange is ALWAYS properly configured and never overridden
       const newNode: Node = {
         id: nodeId,
         type: "mindmap",
         position: nodeData.position || { x: 100, y: 100 },
+        // Merge existing nodeData but ensure critical data properties are preserved
+        ...nodeData,
         data: {
-          content: nodeData.data?.content || "New Node",
-          style: nodeData.data?.style || {
+          // Start with default values
+          content: "New Node",
+          style: {
             backgroundColor: "#ffffff",
             borderColor: "#000000", 
             borderWidth: 2,
             fontSize: 14,
           },
-          priority: nodeData.data?.priority || null,
-          workflowStatus: nodeData.data?.workflowStatus || null,
-          dueDate: nodeData.data?.dueDate || null,
-          isPinned: nodeData.data?.isPinned || false,
-          isArchived: nodeData.data?.isArchived || false,
+          priority: null,
+          workflowStatus: null,
+          dueDate: null,
+          isPinned: false,
+          isArchived: false,
+          // Merge with any provided data
+          ...nodeData.data,
+          // But ALWAYS override onChange to ensure text saving works
           onChange: (newText: string) => {
             console.log(`[NODE] onChange called for node ${nodeId} with text:`, newText);
             handleTextChange(nodeId, newText);
           },
         },
-        ...nodeData,
       };
 
       console.log(`[HOOK-${timestamp}] Node criado:`, newNode);
+      console.log(`[HOOK-${timestamp}] 🔍 Verificando onChange:`, typeof newNode.data.onChange);
 
       // Activate protection to prevent ReactFlow from overriding our addition
       addingNodeProtection.current = true;
@@ -274,7 +292,7 @@ export function useMindmap(projectId: string) {
       try {
         await updateMindmapNodes({
           projectId,
-          nodes: [...nodes, newNode], // Use current nodes + new node
+          nodes: [newNode], // Just save the new node instead of all nodes
           linkedProjectId,
         });
         console.log(`[HOOK-${timestamp}] ✅ Node salvo no banco com sucesso`);
@@ -299,7 +317,7 @@ export function useMindmap(projectId: string) {
       pendingOperations.current.delete('addNode');
       console.log(`[HOOK-${timestamp}] 🔓 Operação addNode finalizada`);
     }
-  }, [projectId, supabase, handleTextChange]);
+  }, [projectId, supabase, handleTextChange, nodes]);
 
   const removeNode = useCallback(async (nodeId: string) => {
     const operationId = `removeNode-${nodeId}`;
@@ -375,8 +393,16 @@ export function useMindmap(projectId: string) {
           ...(updates.dueDate !== undefined ? { dueDate: updates.dueDate } : {}),
           ...(updates.isPinned !== undefined ? { isPinned: updates.isPinned } : {}),
           ...(updates.isArchived !== undefined ? { isArchived: updates.isArchived } : {}),
+          // ALWAYS preserve the onChange function - this is critical for text saving
+          onChange: currentNode.data.onChange || ((newText: string) => {
+            console.log(`[NODE-FALLBACK] onChange called for node ${nodeId} with text:`, newText);
+            handleTextChange(nodeId, newText);
+          }),
         },
       };
+
+      console.log(`[UPDATE] Updating node ${nodeId} with:`, updates);
+      console.log(`[UPDATE] 🔍 Verificando onChange preserved:`, typeof updatedNode.data.onChange);
 
       // 3. Atualiza o estado local
       setNodes((prev) => prev.map((n) => (n.id === nodeId ? updatedNode : n)));
@@ -393,7 +419,7 @@ export function useMindmap(projectId: string) {
       console.error("Error updating node:", err);
       setError(err instanceof Error ? err : new Error("Failed to update node"));
     }
-  }, [projectId, supabase, nodes]);
+  }, [projectId, supabase, nodes, handleTextChange]);
 
   // ReactFlow Integration - Standard controlled approach
   const onNodesChange = useCallback((changes: NodeChange[]) => {
