@@ -41,15 +41,14 @@ export const MindmapNode = memo(({ data, isConnectable, id, selected }: NodeProp
   const pathname = usePathname();
   const currentProjectId = pathname?.split("/admin/project/")[1]?.split("/")[0] || "";
 
-  // Debug: Log onChange status on render
-  useEffect(() => {
-    console.log(`[NODE-${id}] Rendered with data.onChange:`, !!data.onChange, `content: "${data.content}"`);
-  }, [data.onChange, data.content, id]);
+  // Monitor onChange and content changes for debugging if needed
+  // useEffect(() => {
+  //   console.log(`[NODE-${id}] Rendered with data.onChange:`, !!data.onChange, `content: "${data.content}"`);
+  // }, [data.onChange, data.content, id]);
 
   // Sync local text with data.content when it changes from external updates
   useEffect(() => {
     if (data.content !== text && !isEditing) {
-      console.log(`[NODE-${id}] Syncing text from "${text}" to "${data.content}"`);
       setText(data.content);
     }
   }, [data.content, text, isEditing, id]);
@@ -88,7 +87,7 @@ export const MindmapNode = memo(({ data, isConnectable, id, selected }: NodeProp
     }
   }, [data.style, isEditing]);
 
-  // Listen for custom edit events from ReactFlow
+  // Listen for custom edit events from ReactFlow (backup method)
   useEffect(() => {
     const handleEditEvent = (event: any) => {
       if (event.detail.nodeId === id) {
@@ -107,40 +106,69 @@ export const MindmapNode = memo(({ data, isConnectable, id, selected }: NodeProp
     }
   }, [id]);
 
-  // Simplified double click detection
-  const handleDoubleClick = (event: React.MouseEvent) => {
-    event.stopPropagation();
-    event.preventDefault();
+  // Click management state
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const clickCountRef = useRef(0);
+
+  // Handle clicks with distinction between single and double click
+  const handleClick = (event: React.MouseEvent) => {
+    clickCountRef.current += 1;
+    console.log(`🖱️ [NODE-${id}] Click #${clickCountRef.current}`);
     
-    setIsEditing(true);
-    // Emit edit start event
-    document.dispatchEvent(new CustomEvent('nodeEditStart'));
+    if (clickCountRef.current === 1) {
+      // Start timeout for single click - let ReactFlow handle selection
+      clickTimeoutRef.current = setTimeout(() => {
+        // This is a single click - ReactFlow already handled selection
+        console.log(`👆 [NODE-${id}] Single click confirmed - selection handled by ReactFlow`);
+        clickCountRef.current = 0;
+      }, 300); // 300ms delay to detect double click
+    } else if (clickCountRef.current === 2) {
+      // This is a double click
+      console.log(`🎯 [NODE-${id}] DOUBLE CLICK DETECTED`);
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+      clickCountRef.current = 0;
+      
+      // Prevent default and propagation for double click only
+      event.preventDefault();
+      event.stopPropagation();
+      setIsEditing(true);
+      console.log(`✅ [NODE-${id}] Editing mode activated`);
+      // Emit edit start event
+      document.dispatchEvent(new CustomEvent('nodeEditStart'));
+    }
   };
 
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleMouseDown = (event: React.MouseEvent) => {
-    event.stopPropagation();
+    // Allow ReactFlow to handle drag and selection normally
   };
 
   const handleBlur = () => {
-    console.log(`[NODE-${id}] handleBlur called - isEditing: ${isEditing}, text: "${text}"`);
-    console.log(`[NODE-${id}] data.onChange exists:`, !!data.onChange);
-    
     setIsEditing(false);
     // Emit edit stop event
     document.dispatchEvent(new CustomEvent('nodeEditStop'));
     
     if (data.onChange) {
-      console.log(`[NODE-${id}] 🔄 Calling data.onChange with text: "${text}"`);
       data.onChange(text);
     } else {
       console.error(`[NODE-${id}] ❌ data.onChange is not defined!`);
     }
   };
 
-  // Add handler for text area change to see if it's being updated
+  // Handle text area changes
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
-    console.log(`[NODE-${id}] Text changed from "${text}" to "${newText}"`);
     setText(newText);
   };
 
@@ -217,7 +245,7 @@ export const MindmapNode = memo(({ data, isConnectable, id, selected }: NodeProp
           : `${data.style?.borderWidth || 1}px solid ${data.style?.borderColor || "#000000"}`,
         fontSize: data.style?.fontSize || 14,
       }}
-      onDoubleClick={handleDoubleClick}
+      onClick={handleClick}
       onMouseDown={handleMouseDown}
     >
       

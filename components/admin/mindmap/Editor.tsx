@@ -125,7 +125,7 @@ export function EditorMindmap({
     setSelectedNode(node);
   }, []);
 
-  // Handle node double click
+  // Handle node double click (backup method, primary is direct handler in Node component)
   const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node) => {
     event.stopPropagation();
     event.preventDefault();
@@ -453,6 +453,14 @@ export function EditorMindmap({
           data: {
             ...node.data,
             onAddNode: handleAddNode,
+            onChange: (newText: string) => {
+              updateNode(node.id, { content: newText });
+              
+              // Emit event for undo tracking
+              document.dispatchEvent(new CustomEvent('nodeTextSaved', {
+                detail: { nodeId: node.id, newText }
+              }));
+            },
           }
         }))}
         edges={edges}

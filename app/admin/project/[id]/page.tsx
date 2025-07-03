@@ -1039,7 +1039,7 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                   <Menu size={18} />
                 </button>
               )}
-              <h1 className="text-base sm:text-xl font-bold truncate">Project {projectTitle ?? ""}</h1>
+              <h1 className="text-base sm:text-xl font-bold truncate">{projectTitle ?? ""}</h1>
             </div>
             
             {/* Right side - Controls */}
