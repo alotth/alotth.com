@@ -38,7 +38,7 @@ const edgeTypes = {
 
 interface EditorProps {
   projectId: string;
-  handleAddNode: () => Promise<string | undefined>;
+  handleAddNode: (nodeData?: Partial<Node>) => Promise<string | undefined>;
   handleAddProjectNode: (
     linkedProjectId: string,
     projectName: string,
@@ -87,6 +87,7 @@ export function EditorMindmap({
   // Simplified ReactFlow refresh logic
   const [reactFlowKey, setReactFlowKey] = useState(0);
   const [isEditingAny, setIsEditingAny] = useState(false);
+  const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
   
   // Track selection clearing after position changes
   useEffect(() => {
@@ -123,28 +124,48 @@ export function EditorMindmap({
 
   // Track double clicks on pane
   const lastPaneClickTime = useRef<number>(0);
-  const DOUBLE_CLICK_THRESHOLD = 300; // ms
+  const lastPaneClickPosition = useRef({ x: 0, y: 0 });
+  const DOUBLE_CLICK_THRESHOLD = 300;
 
-  // Handle pane click (deselect and detect double clicks)
   const onPaneClick = useCallback(async (event: React.MouseEvent) => {
-    setSelectedNode(null);
     const currentTime = Date.now();
     const timeDiff = currentTime - lastPaneClickTime.current;
+    
+    // Store the click position in screen coordinates
+    lastPaneClickPosition.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+
     if (timeDiff < DOUBLE_CLICK_THRESHOLD) {
-      // Double click detected - create new node
+      // This is a double click
       event.preventDefault();
+      event.stopPropagation();
+      
       if (!reactFlowInstance.current) return;
-      const position = reactFlowInstance.current.project({
-        x: event.clientX,
-        y: event.clientY,
+
+      // Convert screen coordinates to flow coordinates
+      const position = reactFlowInstance.current.screenToFlowPosition({
+        x: lastPaneClickPosition.current.x,
+        y: lastPaneClickPosition.current.y,
       });
+
+      console.log('Double click position:', { 
+        screen: lastPaneClickPosition.current, 
+        flow: position 
+      });
+
       try {
-        const newNodeId = await handleAddNode();
+        // Call handleAddNode with the position data
+        const newNodeId = await handleAddNode({ 
+          position,
+          data: { content: "" },
+          type: "mindmap"
+        });
+        
         if (newNodeId) {
-          setTimeout(() => {
-            updateNode(newNodeId, { position });
-            setPendingEditNodeId(newNodeId); // Sinaliza para ativar edição depois
-          }, 50);
+          // Set up edit mode
+          setPendingEditNodeId(newNodeId);
         }
       } catch (error) {
         console.error("Error creating node:", error);
@@ -155,8 +176,9 @@ export function EditorMindmap({
         });
       }
     }
+    
     lastPaneClickTime.current = currentTime;
-  }, [handleAddNode, updateNode, toast]);
+  }, [handleAddNode, toast]);
 
   // Handle selection changes for bulk operations
   const onSelectionChange: OnSelectionChangeFunc = useCallback(({ nodes: selectedNodes, edges: selectedEdges }) => {
@@ -282,8 +304,6 @@ export function EditorMindmap({
     })));
   };
 
-  const [pendingEditNodeId, setPendingEditNodeId] = useState<string | null>(null);
-
   // Efeito para ativar edição após proteção e renderização do node
   useEffect(() => {
     if (!pendingEditNodeId) return;
@@ -380,6 +400,7 @@ export function EditorMindmap({
         fitView
         className="text-gray-900"
         deleteKeyCode={["Delete", "Backspace"]}
+        zoomOnDoubleClick={false}
       >
         <Background />
         <Controls />

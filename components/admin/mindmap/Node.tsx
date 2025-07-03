@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useEffect } from "react";
-import { Handle, Position, NodeProps } from "reactflow";
+import { Handle, Position, NodeProps, Node } from "reactflow";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { cn, extractUrlsFromContent } from "@/lib/utils";
@@ -18,7 +18,7 @@ interface MindmapNodeData {
   };
   onChange?: (newText: string) => void;
   lastProjectNodeAdded?: number; // Timestamp of last project node addition
-  onAddNode?: () => Promise<string | undefined>;
+  onAddNode?: (nodeData?: Partial<Node>) => Promise<string | undefined>;
 }
 
 const truncateText = (text: string, maxLength: number) => {
@@ -28,7 +28,7 @@ const truncateText = (text: string, maxLength: number) => {
   return cleanText.slice(0, 20) + "...";
 };
 
-export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapNodeData>): JSX.Element => {
+export const MindmapNode = memo(({ data, isConnectable, id, selected }: NodeProps<MindmapNodeData>): JSX.Element => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.content);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -159,20 +159,26 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
     }
 
     try {
-      const newNodeId = await data.onAddNode();
+      const currentNode = getNode(id);
+      if (!currentNode) return;
+
+      // Calculate new node position with increased distance and random vertical offset
+      const horizontalOffset = handleType === 'source' ? 400 : -400;
+      const verticalOffset = Math.random() * 100 - 50; // Random value between -50 and 50
+      const newPosition = {
+        x: currentNode.position.x + horizontalOffset,
+        y: currentNode.position.y + verticalOffset,
+      };
+
+      // Call onAddNode with position data
+      const newNodeId = await data.onAddNode({ 
+        position: newPosition,
+        data: { content: "" },
+        type: "mindmap"
+      });
+
       if (newNodeId) {
-        const currentNode = getNode(id);
-        if (!currentNode) return;
-
-        // Calculate new node position with increased distance and random vertical offset
-        const horizontalOffset = handleType === 'source' ? 400 : -400;
-        const verticalOffset = Math.random() * 100 - 50; // Random value between -50 and 50
-        const newPosition = {
-          x: currentNode.position.x + horizontalOffset,
-          y: currentNode.position.y + verticalOffset,
-        };
-
-        // Emit a custom event to update node position and create connection
+        // Emit a custom event to create connection
         document.dispatchEvent(new CustomEvent('newNodeFromHandle', {
           detail: {
             newNodeId,
@@ -201,11 +207,14 @@ export const MindmapNode = memo(({ data, isConnectable, id }: NodeProps<MindmapN
       className={cn(
         "px-4 py-2 shadow-md rounded-md bg-white  transition-all duration-200 nopan relative group",
         isExpanded ? "w-[600px]" : "w-[200px]",
-        !isExpanded && !isEditing && "max-h-[160px] overflow-hidden"
+        !isExpanded && !isEditing && "max-h-[160px] overflow-hidden",
+        selected && "ring-2 ring-blue-500 ring-offset-1"
       )}
       style={{
         backgroundColor: data.style?.backgroundColor || "#ffffff",
-        border: "1px solid #000000",
+        border: selected 
+          ? "2px solid #3b82f6" 
+          : `${data.style?.borderWidth || 1}px solid ${data.style?.borderColor || "#000000"}`,
         fontSize: data.style?.fontSize || 14,
       }}
       onDoubleClick={handleDoubleClick}
