@@ -19,7 +19,7 @@ import { Node, Edge, NodeChange, Position } from "reactflow";
 import Dagre from "@dagrejs/dagre";
 import { MindmapProject, Priority, WorkflowStatus } from "@/types/mindmap";
 import { getAvailableProjects } from "@/lib/mindmap";
-import { ChevronLeft, ChevronRight, Menu, X, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Menu, X, Upload, Plus, Search, Trash2 } from "lucide-react";
 import { PrioritySelect } from "@/components/ui/priority-select";
 import { WorkflowSelect } from "@/components/ui/workflow-select";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -42,6 +42,8 @@ import {
 } from "@/lib/mindmap";
 import { useToast } from "@/components/ui/use-toast";
 import { NotesSearch } from "@/components/admin/mindmap/NotesSearch";
+import { createMindmapProject, deleteMindmapProject } from "@/lib/mindmap";
+import { useRouter } from "next/navigation";
 
 interface MindmapPageProps {
   params: {
@@ -58,6 +60,104 @@ interface QuickCreateNoteProps {
   currentProjectId: string;
   projects: MindmapProject[];
 }
+
+// Modal de criação de projeto
+interface CreateProjectModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ open, onClose, onCreated }) => {
+  const router = useRouter();
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  if (!open) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    
+    try {
+      setSubmitting(true);
+      const project = await createMindmapProject(title.trim(), description.trim() || undefined);
+      onClose();
+      onCreated();
+      // Navegar para o projeto criado
+      router.push(`/admin/project/${project.id}`);
+    } catch (err) {
+      console.error("Failed to create project", err);
+      alert("Failed to create project. See console for details.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!submitting) {
+      setTitle("");
+      setDescription("");
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-background border border-border rounded-lg p-4 sm:p-6 w-full max-w-xl shadow-lg max-h-[90vh] overflow-auto">
+        <h2 className="text-lg font-semibold mb-4">Criar Novo Projeto</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="project-title" className="block text-sm font-medium mb-1">
+              Título *
+            </label>
+            <input
+              id="project-title"
+              type="text"
+              required
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground text-base focus:ring-2 focus:ring-primary focus:border-transparent"
+              placeholder="Nome do projeto"
+              disabled={submitting}
+            />
+          </div>
+          <div>
+            <label htmlFor="project-description" className="block text-sm font-medium mb-1">
+              Descrição (Markdown)
+            </label>
+            <MarkdownEditor
+              value={description}
+              onChange={setDescription}
+              placeholder="Descrição do projeto em markdown..."
+              rows={3}
+              disabled={submitting}
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row justify-end gap-3">
+            <Button 
+              variant="outline" 
+              type="button" 
+              onClick={handleClose} 
+              className="w-full sm:w-auto"
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              disabled={submitting || !title.trim()} 
+              className="w-full sm:w-auto"
+            >
+              {submitting ? "Criando..." : "Criar Projeto"}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
 
 const QuickCreateNote: React.FC<QuickCreateNoteProps> = ({
   newNoteText,
@@ -349,6 +449,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[]) => {
 
 export default function MindmapPage({ params }: MindmapPageProps) {
   const { id } = params;
+  const router = useRouter();
+  const { toast } = useToast();
   const [viewType, setViewType] = useState<ViewType>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(`project_view_type_${id}`);
@@ -374,6 +476,11 @@ export default function MindmapPage({ params }: MindmapPageProps) {
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredNodes, setFilteredNodes] = useState<any[]>([]);
+  
+  // States para busca e criação de projetos
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [filteredProjects, setFilteredProjects] = useState<MindmapProject[]>([]);
 
   const {
     nodes,
@@ -475,9 +582,62 @@ export default function MindmapPage({ params }: MindmapPageProps) {
     }
   }, [nodes, searchQuery]);
 
+  // Filter projects based on search query
+  useEffect(() => {
+    if (!projectSearchQuery.trim()) {
+      setFilteredProjects(projects);
+    } else {
+      const query = projectSearchQuery.toLowerCase();
+      const filtered = projects.filter(project => 
+        project.title.toLowerCase().includes(query) ||
+        (project.description && project.description.toLowerCase().includes(query))
+      );
+      setFilteredProjects(filtered);
+    }
+  }, [projects, projectSearchQuery]);
+
   // Search handler
   const handleSearch = (query: string) => {
     setSearchQuery(query);
+  };
+
+  // Function to reload projects after creation
+  const reloadProjects = async () => {
+    try {
+      const newProjects = await getAvailableProjects(id);
+      setProjects(newProjects);
+    } catch (err) {
+      console.error("Failed to refresh projects", err);
+    }
+  };
+
+  // Function to delete current project
+  const handleDeleteProject = async () => {
+    if (!confirm("⚠️ ATENÇÃO: Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita e todos os dados relacionados serão perdidos permanentemente.")) {
+      return;
+    }
+
+    try {
+      await deleteMindmapProject(id);
+      
+      // Redirect to projects list after successful deletion
+      router.push("/admin/project");
+      
+      // Show success message (though user will be redirected)
+      toast({
+        title: "✅ Projeto excluído",
+        description: "O projeto foi excluído com sucesso.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: "❌ Erro ao excluir projeto",
+        description: "Não foi possível excluir o projeto. Tente novamente.",
+        variant: "destructive",
+        duration: 5000,
+      });
+    }
   };
 
   // Handle undo/redo state restoration
@@ -969,8 +1129,33 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             : sidebarCollapsed ? 'w-12' : 'w-64'
         } flex flex-col`}
       >
+        {/* Header com título e controles */}
         <div className="flex items-center justify-between p-2 border-b border-border">
-          {(!sidebarCollapsed || (isMobile && sidebarOpen)) && <h3 className="font-medium text-sm sm:text-base">Projects</h3>}
+          {(!sidebarCollapsed || (isMobile && sidebarOpen)) && (
+            <div className="flex items-center gap-2 flex-1">
+              <h3 className="font-medium text-sm sm:text-base">Projects</h3>
+              <Tooltip content="Criar novo projeto" side="bottom">
+                <button
+                  onClick={() => setShowCreateProjectModal(true)}
+                  className="p-1 hover:bg-accent rounded-full transition-colors"
+                >
+                  <Plus size={16} />
+                </button>
+              </Tooltip>
+            </div>
+          )}
+          
+          {sidebarCollapsed && !isMobile && (
+            <Tooltip content="Criar novo projeto" side="right">
+              <button
+                onClick={() => setShowCreateProjectModal(true)}
+                className="p-1 hover:bg-accent rounded-full transition-colors"
+              >
+                <Plus size={16} />
+              </button>
+            </Tooltip>
+          )}
+          
           <button
             onClick={() => {
               if (isMobile) {
@@ -984,41 +1169,64 @@ export default function MindmapPage({ params }: MindmapPageProps) {
             {isMobile ? <X size={18} /> : (sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />)}
           </button>
         </div>
+
+        {/* Campo de busca - apenas quando não está collapsed */}
+        {(!sidebarCollapsed || (isMobile && sidebarOpen)) && (
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={14} />
+              <input
+                type="text"
+                placeholder="Buscar projetos..."
+                value={projectSearchQuery}
+                onChange={(e) => setProjectSearchQuery(e.target.value)}
+                className="w-full pl-7 pr-2 py-1.5 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-transparent"
+              />
+            </div>
+          </div>
+        )}
         
-        <div className="flex-1 overflow-consistent">
+        {/* Lista de projetos */}
+        <div className="flex-1 overflow-y-auto">
           {projectsLoading ? (
             <div className="flex items-center justify-center h-32">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
             </div>
           ) : (
             <div className="space-y-1 p-2">
-              {projects.map((project) => (
-                <Link 
-                  key={project.id} 
-                  href={`/admin/project/${project.id}`}
-                  onClick={() => isMobile && setSidebarOpen(false)}
-                  className={`block p-2 rounded-md transition-colors ${
-                    project.id === id 
-                      ? 'bg-accent text-accent-foreground' 
-                      : 'hover:bg-accent/50'
-                  }`}
-                >
-                  {(!sidebarCollapsed || (isMobile && sidebarOpen)) ? (
-                    <div>
-                      <div className="font-medium truncate text-sm">{project.title}</div>
-                      {project.description && (
-                        <div className="text-xs text-muted-foreground truncate">
-                          {project.description}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="font-medium text-sm text-center">
-                      {project.title.slice(0, 3)}
-                    </div>
-                  )}
-                </Link>
-              ))}
+              {filteredProjects.length === 0 && projectSearchQuery ? (
+                <div className="text-center text-muted-foreground text-sm p-4">
+                  Nenhum projeto encontrado para &ldquo;{projectSearchQuery}&rdquo;
+                </div>
+              ) : (
+                filteredProjects.map((project) => (
+                  <Link 
+                    key={project.id} 
+                    href={`/admin/project/${project.id}`}
+                    onClick={() => isMobile && setSidebarOpen(false)}
+                    className={`block p-2 rounded-md transition-colors ${
+                      project.id === id 
+                        ? 'bg-accent text-accent-foreground' 
+                        : 'hover:bg-accent/50'
+                    }`}
+                  >
+                    {(!sidebarCollapsed || (isMobile && sidebarOpen)) ? (
+                      <div>
+                        <div className="font-medium truncate text-sm">{project.title}</div>
+                        {project.description && (
+                          <div className="text-xs text-muted-foreground truncate">
+                            {project.description}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="font-medium text-sm text-center">
+                        {project.title.slice(0, 3)}
+                      </div>
+                    )}
+                  </Link>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -1070,6 +1278,18 @@ export default function MindmapPage({ params }: MindmapPageProps) {
                   className="h-8 w-8 p-0"
                 >
                   <Upload className="h-4 w-4" />
+                </Button>
+              </Tooltip>
+              
+              {/* Delete project button */}
+              <Tooltip content="Excluir este projeto" side="top">
+                <Button
+                  onClick={handleDeleteProject}
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </Tooltip>
               
@@ -1250,6 +1470,13 @@ export default function MindmapPage({ params }: MindmapPageProps) {
           handleImportNodes(data);
           setIsImportModalOpen(false);
         }}
+      />
+      
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        open={showCreateProjectModal}
+        onClose={() => setShowCreateProjectModal(false)}
+        onCreated={reloadProjects}
       />
     </div>
   );
